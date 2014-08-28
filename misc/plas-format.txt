@@ -1,0 +1,72 @@
+
+# PROBLEM STATEMENT
+# p <data_format> args...
+# 
+# Where <data_format> can be:
+# - oct: The file describes a problem in terms of octagonal constraints
+# - octdiff: The file describes a problem in terms of differences.
+# - oct_int: same as `oct`, but hints the app to consider that the problem
+#   should be described in an integer domain (e.g. results should be given as
+#   integers, but the app is free to represent constants as floats).
+# - octdiff_int: idem.
+#
+# args depends on the problem description.
+#
+# `args` For `oct`-based problem descriptions:
+# - p <data_format> <number_variables> <number_constraints>
+#
+# `args` For `octdiff`-based problem descriptions:
+# - p <data_format> <number_variables> <number_entries>
+#
+# Notes:
+# - If number_constraints is not given, the app can consider it to have an
+#   upper value of `number_entries * 2`.
+# - For `octdiff`-based descriptions, the number of variables in the problem
+#   must greater than AND a multiple of 2.
+p octdiff 10 5
+
+# ENTRIES
+# For octagons, e is a CONSTRAINT:
+# e <var1> [var2] <constant>
+# var1 and var2 must be signed integers.
+# constant must be a number (integer or floating-point)
+e 1 2 -5
+
+# For differences, e is a TRANSFORMED CONSTRAINT.
+# These entries have the same format as before, but the variables are numbered
+# in a "transformed numbering space." The numbering is the same as described
+# by ???Miné??? (`isEven(var) ? var + 1 : var - 1`).
+e 0 1 -5
+e 0 1 -5
+
+# For graphs, e is an EDGE LIST:
+# e <vertice> [edge_entry]...
+# Where:
+# - edge_entry is `<vertice> <cost_constant>`
+e 0 1 23 2 45
+e 1
+e 2 2 5
+
+
+# VARIABLE/EDGE NAMES
+# These entries are mainly used for debugging purposes
+# n <var_or_edge> <name> [entry_type]
+# Where:
+# - entry_type can be 'e' (for edges or variables from transformed constraints)
+#   or 'o' (for variables from original constraints).
+# - var_or_edge must be an unsigned integer.
+# - name must be an identifier in the format /[a-zA-Z_][0-9a-zA-Z_]*/. 
+# Note: Although identifiers are irrelevant to the problem solving per se,
+# applications should consider them to be case-sensitive.
+
+# For original constraints
+# Note: In a `octdiff`-based problem, the names of the transformed variables
+# should be deduced automatically, like in `z1_1` and `z1_2` for example.
+n 0 z1
+
+
+
+
+
+
+ 
