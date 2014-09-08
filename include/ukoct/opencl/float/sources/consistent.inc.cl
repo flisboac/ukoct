@@ -1,5 +1,6 @@
 ukoct_STRFY(
 
+
 /**
  * A very naive and rudimentary consistency check.
  * This operator does not consider any kind of optimization, but it is the
@@ -7,40 +8,22 @@ ukoct_STRFY(
  */
 __kernel
 void octdiff_consistent__global_reduce(
-		__global float* from,
-		__global float* result,
-		__const  int    rowmajor
+	__const  int    nvars,
+	__global float* from,
+	__const  int    rowmajor,
+	__global float* result
 ) {
-	const int nvars = get_global_size(0); // equals `dbm.size()`
+	const int nelems = nvars;
 	
 	const int g_id = get_global_id(0);
 	const int g_kk = idx(rowmajor, nvars, g_id, g_id);
 	
-	// Do the reduction
-	for (unsigned int i = nvars; i > 0; i >>= 1) {
-		if (i < nvars) {
-			// To avoid branch misses the most we can, we check for the
-			// second-and-onwards condition first.
-			
-			if(g_id < i) {				
-				// The second step would be to reduce the values, up to the  
-				result[g_id] = min(result[g_id], result[g_id + i]);
-			}
-			
-		} else {
-			// The first step is to set zero to all values on the diagonal
-			// that are greater than zero.
-			float v = from[g_kk];
-			if (v > 0)
-				// This assumes the current item's counterpart will do the
-				// same, because the DBM should be coherent prior to the
-				// kernel call.
-				from[g_kk] = v = 0;
-			result[g_id] = v;
-		}
-		
-		barrier(CLK_GLOBAL_MEM_FENCE);
-	}
+	float v = from[g_kk];
+	if (v > 0) from[g_kk] = v = 0;
+	result[g_id] = v;
+	barrier(CLK_GLOBAL_MEM_FENCE);
+	float_reduceMin__global(result, g_id, nelems);
+	if (g_id == 0) result[0] = (result[0] < 0 ? 0 : 1)
 }
 
 

@@ -2,11 +2,11 @@ ukoct_STRFY(
 
 
 __kernel
-void octdiff_coherent__global_reduce(
+void octdiff_isTop__global_reduce(
 	__const  int    nvars,
 	__global float* from,
 	__const  int    rowmajor,
-	__global float* result
+	__global float* result,
 ) {
 	const int nelems = nvars * nvars;
 	const int g_i = get_global_id(0);
@@ -14,9 +14,8 @@ void octdiff_coherent__global_reduce(
 
 	const int g_id = ridx(nvars, g_i, g_j);
 	const int g_ij = idx(rowmajor, nvars,    g_i,     g_j);
-	const int g_JI = idx(rowmajor, nvars, sw(g_j), sw(g_i));
 
-	result[g_ij] = (from[g_ij] == from[g_JI] ? 1 : 0);
+	result[g_ij] = (g_i != g_j ? (isinf(from[g_ij]) ? 1 : 0) : 1); //(from[g_ij] < 0 ? 0 : 1));  
 	barrier(CLK_GLOBAL_MEM_FENCE);
 	float_reduceMin__global(result, g_id, nelems);
 }

@@ -26,6 +26,13 @@
 namespace ukoct {
 
 
+enum EImplementation {
+	IMPL_NONE,
+	IMPL_CPU,
+	IMPL_OPENCL,
+};
+
+
 /**
  * A simple enumeration of all possible operations on an octagon DBM.
  * It is believed (by the author, at least) that their names are descriptive
@@ -34,10 +41,11 @@ namespace ukoct {
 enum EOperation {
 	OPER_INTERMEDIATE = -1, //!< An intermediate or incomplete operation. Must be the identifier for all partial operations.
 	OPER_NONE,              //!< No-op.
+	OPER_COPY,              //!< Implements a simple matrix-to-matrix copy (copy assignment operation).
 	OPER_CONSISTENT,        //!< @see IOctDbm<T>::consistent
 	OPER_INTCONSISTENT,     //!< @see IOctDbm<T>::intConsistent
 	OPER_COHERENT,          //!< @see IOctDbm<T>::coherent
-	OPER_CLOSED,            //!< @see IOctDbm<T>::closed
+	OPER_ISCLOSED,          //!< @see IOctDbm<T>::closed
 	OPER_STRONGLYCLOSED,    //!< @see IOctDbm<T>::stronglyClosed
 	OPER_TIGHTLYCLOSED,     //!< @see IOctDbm<T>::tightlyClosed
 	OPER_WEAKLYCLOSED,      //!< @see IOctDbm<T>::weaklyClosed
@@ -48,14 +56,92 @@ enum EOperation {
 	OPER_STRENGTHEN,        //!< @see IOctDbm<T>::strengthen
 	OPER_TIGHTEN,           //!< @see IOctDbm<T>::tighten
 	OPER_TOP,               //!< @see IOctDbm<T>::top
-	OPER_ADDCONS,           //!< @see IOctDbm<T>::operator<<(plas::OctDiffConstraint<T>)
+	OPER_ADDDIFFCONS,       //!< @see IOctDbm<T>::operator<<(plas::OctDiffConstraint<T>)
 	OPER_ADDOCTCONS,        //!< @see IOctDbm<T>::operator<<(plas::OctConstraint<T>)
 	OPER_FORGET,            //!< @see IOctDbm<T>::operator>(plas::var_t)
+	OPER_EQUALS,            //!< @see OPctDbm<T>
 	OPER_COMPARE,           //!< @see IOctDbm<T>::compare
+	OPER_INCLUDES,          //!< @see IOctDbm<T>
 	OPER_UNION,             //!< @see IOctDbm<T>::operator&
 	OPER_INTERSECTION       //!< @see IOctDbm<T>::operator|
 };
 
+
+enum EOperDetails {
+	O_NONE,
+
+	// Memory type, mutually inclusive (max 3 options)
+	O_MEM_BASE_ = 0,
+	O_MEM_GLOBAL = 1 << O_MEM_BASE_,          // Alorithm executes operation on global memory (obviously excluding the input matrix that MUST be global...)
+	O_MEM_LOCAL = 1 << (O_MEM_BASE_ + 1),     // Algorithm executes operation on local memory
+	O_MEM_DUAL = O_MEM_GLOBAL | O_MEM_LOCAL,
+	O_MEM_MIN_ = O_MEM_GLOBAL,
+	O_MEM_MAX_ = O_MEM_DUAL,
+	O_MEM = O_MEM_DUAL | O_MEM_GLOBAL | O_MEM_LOCAL,
+
+	// Dimension options, mutually exclusive, non-ordered
+	O_DIMS_BASE_ = O_MEM_BASE_ + 4,
+	O_DIMS_OPTIMAL = 1 << O_DIMS_BASE_,   // Resizes the problem considering the underlying hardware, to improve performance
+	O_DIMS_EXACT = 2 << O_DIMS_BASE_,     //
+	O_DIMS_FULLGROUP = 3 << O_DIMS_BASE_, //
+	O_DIMS_MIN_ = O_DIMS_OPTIMAL,
+	O_DIMS_MAX_ = O_DIMS_FULLGROUP,
+	O_DIMS = O_DIMS_OPTIMAL | O_DIMS_EXACT | O_DIMS_FULLGROUP,
+
+	// Reduction options, mutually exclusive
+	O_REDUCE_BASE_ = O_DIMS_BASE_ + 3,
+	O_REDUCE_OPTIMAL = 1 << O_REDUCE_BASE_,
+	O_REDUCE_ELEM = 2 << O_REDUCE_BASE_,
+	O_REDUCE_VEC = 3 << O_REDUCE_BASE_,
+	O_REDUCE_MIN_ = O_REDUCE_OPTIMAL,
+	O_REDUCE_MAX_ = O_REDUCE_VEC,
+	O_REDUCE = O_REDUCE_OPTIMAL | O_REDUCE_ELEM | O_REDUCE_VEC,
+
+	// Execution options, mutually exclusive
+	O_EXEC_BASE_ = O_REDUCE_BASE_ + 3,
+	O_EXEC_OPTIMAL = 1 << O_EXEC_BASE_,
+	O_EXEC_LOOP = 2 << O_EXEC_BASE_,
+	O_EXEC_QUEUED = 3 << O_EXEC_BASE_,
+	O_EXEC_MIN_ = O_EXEC_OPTIMAL,
+	O_EXEC_MAX_ = O_EXEC_QUEUED,
+	O_EXEC = O_EXEC_OPTIMAL | O_EXEC_LOOP | O_EXEC_QUEUED
+};
+
+class OperationDetails {
+public:
+	OperationDetails() : _flags(0) {};
+	OperationDetails(const OperationDetails& other) = default;
+	OperationDetails(unsigned int flags) : _flags(flags) {}
+	inline operator const unsigned int&() const { return _flags; }
+	inline operator unsigned int&() { return _flags; }
+	inline bool isMem(unsigned int other, bool any = false) {
+		unsigned int other_mem = other & O_MEM, self_mem = _flags & O_MEM;
+		return any ? (self_mem & other_mem != 0) : (self_mem & other_mem == other_mem);
+	}
+	inline bool isDims(unsigned int other) {
+		unsigned int other_dims = other & O_DIMS, self_dims = _flags & O_DIMS;
+		return self_dims == other_dims;
+	}
+	inline bool isReduce(unsigned int other) {
+		unsigned int other_reduce = other & O_REDUCE, self_reduce = _flags & O_REDUCE;
+		return self_reduce == other_reduce;
+	}
+	inline bool isExec(unsigned int other) {
+		unsigned int other_exec = other & O_EXEC, self_exec = _flags & O_EXEC;
+		return self_exec == other_exec;
+	}
+	inline bool any(unsigned int other) {
+		return isMem(true) || isDims() || isReduce() || isExec();
+	}
+	inline bool all(unsigned int other) {
+		return isMem(true) && isDims() && isReduce() && isExec();
+	}
+
+private:
+	unsigned int _flags;
+};
+
+typedef unsigned int OperationDetails;
 
 /**
  * The library's base exception class.
@@ -78,10 +164,60 @@ private:
 };
 
 
+template <typename T> class State {
+
+private:
+	bool _valid;
+	size_t _size;
+	size_t _rowMajor;
+	T* _rawInput;
+	std::vector<T> _selfRawInput;
+};
+
+
+template <typename T> class OperatorArgs {
+
+private:
+	State<T>& _state;
+	State<T>* _otherState;
+	bool _intBased;
+	bool _waiting;
+	size_t _iterations;
+	plas::var_t _var;
+	plas::OctDiffConstraint _diffcons;
+	plas::OctConstraint _octcons;
+
+private:
+	State<T> _selfState;
+};
+
+
+template <typename T> struct IOperatorResult {
+	virtual ~IOperatorResult() {}
+	virtual bool finished() = 0;
+	virtual void wait() = 0;
+	virtual bool valid() = 0;
+	virtual bool boolResult() = 0;
+	virtual T typeResult() = 0;
+};
+
+
+template <typename T> class IOperator {
+	virtual ~IOperator() {}
+	virtual IOperator<T>* instantiate() = 0;
+	virtual ukoct::EOperation operation() = 0;
+	virtual ukoct::OperationDetails details() = 0;
+	virtual void run(const OperatorArgs<T>& args) = 0;
+	virtual const IOperatorResult<T>& result() = 0;
+};
+
+
 /**
  * Exception thrown when a timeout happens.
  */
 class TimeoutError : public Error {};
+
+
 
 
 /**
@@ -233,7 +369,7 @@ template <typename T> struct IOctDbm {
  *
  * The implementation of a
  */
-#ifdef ukoct_DEFAULT_OPENCL
+#ifdef ukoct_DEFAULT_OPENCL_
 struct opencl;
 template <typename T, class Impl = opencl> class OctDbm : public IOctDbm<T> {
 #else

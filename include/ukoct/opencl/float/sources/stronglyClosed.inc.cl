@@ -5,7 +5,7 @@ ukoct_STRFY(
  * result[0] will be 0 if from is coherent, and 1 otherwise.
  */
 __kernel
-void octdiff_closed__global_reduce(
+void octdiff_stronglyClosed__global_reduce(
 	__const  int    nvars,
 	__global float* from,
 	__const  int    rowmajor,
@@ -20,6 +20,8 @@ void octdiff_closed__global_reduce(
 	const int g_ij = idx(rowmajor, nvars,    g_i,     g_j);
 	const int g_ik = idx(rowmajor, nvars,    g_i,     g_k);
 	const int g_kj = idx(rowmajor, nvars,    g_k,     g_j);
+	const int g_iI = idx(rowmajor, nvars,    g_i,  sw(g_i));
+	const int g_Jj = idx(rowmajor, nvars, sw(g_j),    g_j);
 
 	// Consistent
 	if (g_id >= nvars)
@@ -34,14 +36,16 @@ void octdiff_closed__global_reduce(
 	barrier(CLK_GLOBAL_MEM_FENCE);
 	float_reduceMin__global(result, g_id, nelems);
 	
+	// Closedness
 	if (result[0] >= 0) {
-		result[g_id] = (from[g_ij] <= from[g_ik] + from[g_kj]) ? 1 : 0;
+		bool check = (from[g_ij] <= from[g_ik] + from[g_kj]) && (from[g_ij] > from[g_iI] + from[g_Jj]);
+		result[g_id] = check ? 1 : 0;
 		barrier(CLK_GLOBAL_MEM_FENCE);
 		float_reduceMin__global(result, g_id, nelems);
-		
+			
 	} else {
 		if (g_id == 0) result[0] = (result[0] < 0) ? 0 : 1;
-		// barrier?
+		//barrier(CLK_GLOBAL_MEM_FENCE);
 	}
 }
 

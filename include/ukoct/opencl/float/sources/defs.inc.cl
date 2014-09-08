@@ -17,4 +17,56 @@ ukoct_STRFY(
  */
 
 
+inline void float_reduceMin__global(
+	__global     float* vec,
+	const          int  vec_id,
+	const unsigned int  nelems
+) {
+	for (unsigned int i = nelems >> 1; i > 0; i >>= 1) {
+		if(vec_id < i)
+			vec[vec_id] = min(vec[vec_id], vec[vec_id + i]);
+		barrier(CLK_GLOBAL_MEM_FENCE);
+	}
+}
+
+
+inline void float_reduceMax__global(
+	__global     float* vec,
+	const          int  vec_id,
+	const unsigned int  nelems
+) {
+	for (unsigned int i = nelems >> 1; i > 0; i >>= 1) {
+		if(vec_id < i)
+			vec[vec_id] = max(vec[vec_id], vec[vec_id + i]);
+		barrier(CLK_GLOBAL_MEM_FENCE);
+	}
+}
+
+
+inline void float_reduceMin__local(
+	__local      float* vec,
+	const          int  vec_id,
+	const unsigned int  nelems
+) {
+	for (unsigned int i = nelems >> 1; i > 0; i >>= 1) {
+		if(vec_id < i)
+			vec[vec_id] = min(vec[vec_id], vec[vec_id + i]);
+		barrier(CLK_LOCAL_MEM_FENCE);
+	}
+}
+
+
+inline void float_reduceMax__local(
+	__local      float* vec,
+	const          int  vec_id,
+	const unsigned int  nelems
+) {
+	for (unsigned int i = nelems >> 1; i > 0; i >>= 1) {
+		if(vec_id < i)
+			vec[vec_id] = max(vec[vec_id], vec[vec_id + i]);
+		barrier(CLK_LOCAL_MEM_FENCE);
+	}
+}
+
+
 )

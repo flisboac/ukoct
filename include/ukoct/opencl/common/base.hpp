@@ -7,11 +7,10 @@
 #include <vector>
 #include <list>
 #include <map>
+#include <algorithm>
 #include <CL/cl.hpp>
 #include "ukoct/core.hpp"
-#include "ukoct/opencl/common/pool.hpp"
 #include "ukoct/opencl/common/operator.hpp"
-
 
 namespace ukoct {
 namespace impl {
@@ -37,534 +36,314 @@ template <typename T> struct ImplData {
 	 * Holds the OpenCL's code for the implementation. May be an empty string if not
 	 * applicable for a particular type.
 	 */
-	static const char* source() { return ""; }
+	static constexpr const char* source() { return ""; }
 };
 
 
-/**
- * Comparison operator class for `cl::Device`.
- */
-struct Device_less {
-	bool operator()(const cl::Device& a, const cl::Device& b) { return a() < b(); }
-};
-
-
-template <typename T> class BufferKey {
+class OptimizedRangeCalculator {
 public:
-	static const cl_mem_flags FlagsMask = ~(CL_MEM_ALLOC_HOST_PTR | CL_MEM_COPY_HOST_PTR | CL_MEM_USE_HOST_PTR);
+	OptimizedRangeCalculator() :
+		_elemSize(0) {}
+	OptimizedRangeCalculator(const OptimizedRangeCalculator& rhs) :
+		_elemSize(rhs._elemSize),
+		_local1(rhs._local1),
+		_local2(rhs._local2),
+		_local3(rhs._local3),
+		_global1(rhs._global1),
+		_global2(rhs._global2),
+		_global3(rhs._global3) {}
+	OptimizedRangeCalculator(cl::Device& device, size_t size, size_t elemSize) { calculate(device, size, elemSize); }
 
-	BufferKey() :
-		_nelems(0),
-		_flags(CL_MEM_READ_WRITE) {}
+	inline const size_t elemSize() const { return _elemSize; }
+	inline const cl::NDRange& local1() const { return _local1; }
+	inline const cl::NDRange& local2() const { return _local2; }
+	inline const cl::NDRange& local3() const { return _local3; }
+	inline const cl::NDRange& global1() const { return _global1; }
+	inline const cl::NDRange& global2() const { return _global2; }
+	inline const cl::NDRange& global3() const { return _global3; }
+	inline size_t localSize1() const { return ndrangeSize(_local1); }
+	inline size_t localSize2() const { return ndrangeSize(_local2); }
+	inline size_t localSize3() const { return ndrangeSize(_local3); }
+	inline size_t globalSize1() const { return ndrangeSize(_global1); }
+	inline size_t globalSize2() const { return ndrangeSize(_global2); }
+	inline size_t globalSize3() const { return ndrangeSize(_global3); }
+	inline size_t localElemSize1() const { return localSize1() * _elemSize; }
+	inline size_t localElemSize2() const { return localSize2() * _elemSize; }
+	inline size_t localElemSize3() const { return localSize3() * _elemSize; }
+	inline size_t globalElemSize1() const { return globalSize1() * _elemSize; }
+	inline size_t globalElemSize2() const { return globalSize2() * _elemSize; }
+	inline size_t globalElemSize3() const { return globalSize3() * _elemSize; }
 
+	void calculate(cl::Device& device, size_t size, size_t elemSize) {
+		_elemSize = elemSize;
+		size_t deviceMaxGroupSize = device.getInfo<CL_DEVICE_MAX_WORK_GROUP_SIZE>();
+		std::vector<size_t> maxWorkItemSizes = device.getInfo<CL_DEVICE_MAX_WORK_ITEM_SIZES>();
+		std::vector<size_t> localDims1(1), localDims2(2), localDims3(3);
+		std::vector<size_t> globalDims1(1), globalDims2(2), globalDims3(3);
+		size_t size_pow = highestPow2(size);
 
-	BufferKey(const BufferKey& rhs) :
-		_nelems(rhs._nelems),
-		_flags(rhs._flags) {}
+		//max group size should be powers of 2: deviceMaxGroupSize = highestPow2(deviceMaxGroupSize)
+		//dimensions should be powers of 2: for (size_t i = 0; i < 3; ++i) maxWorkItemSizes[i] = highestPow2(maxWorkItemSizes[i]);
+		//size should be even: size = size + (size & 1)
 
+		localDims1[0] = std::min(size_pow, maxWorkItemSizes[0]);
+		localDims2[0] = std::min(size_pow, maxWorkItemSizes[0]);
+		localDims2[1] = std::min(size_pow, maxWorkItemSizes[1]);
+		localDims3[0] = std::min(size_pow, maxWorkItemSizes[0]);
+		localDims3[1] = std::min(size_pow, maxWorkItemSizes[1]);
+		localDims3[2] = std::min(size_pow, maxWorkItemSizes[2]);
 
-	explicit BufferKey(const cl::Buffer& buffer) {
-		*this = buffer;
-	}
-
-
-	BufferKey(size_t nelems, cl_mem_flags flags) :
-		_nelems(nelems),
-		_flags(flags & FlagsMask) {}
-
-
-	BufferKey<T>& operator=(const cl::Buffer& buffer) {
-		_nelems = buffer.getInfo<CL_MEM_SIZE>() / sizeof(T);
-		_flags = buffer.getInfo<CL_MEM_FLAGS>() & FlagsMask;
-		return *this;
-	}
-
-
-	bool operator<(const BufferKey& other) const { return compare(other) < 0; }
-	bool operator==(const BufferKey& other) const { return compare(other) == 0; }
-	bool operator!=(const BufferKey& other) const { return compare(other) != 0; }
-
-	int compare(const BufferKey<T>& other) {
-		int nelems_cmp = (_nelems > other._nelems) - (_nelems < other._nelems);
-		int flags_cmp = (_flags > other._flags) - (_flags < other._flags);
-		return nelems_cmp == 0 ? flags_cmp : nelems_cmp;
-	}
-
-
-	size_t size() const { return sizeof(T) * _nelems; }
-	size_t nelems() const { return _nelems; }
-	cl_mem_flags flags() const { return _flags; }
-
-private:
-	size_t _nelems;
-	cl_mem_flags _flags;
-};
-
-
-template <typename T> class BufferPool : public MultiPool<cl::Buffer, BufferKey<T> > {
-public:
-	typedef T ElemType;
-	typedef cl::Buffer Type;
-	typedef MultiPool<cl::Buffer, BufferKey<T> > SuperType;
-	typedef typename SuperType::KeyIterator KeyIterator;
-	typedef typename SuperType::ConstKeyIterator ConstKeyIterator;
-	typedef typename SuperType::UnselectedIterator UnselectedIterator;
-	typedef typename SuperType::ConstUnselectedIterator ConstUnselectedIterator;
-
-
-
-	BufferPool() : MultiPool<cl::Buffer, BufferKey<T> >() {}
-
-
-	BufferPool(const BufferPool<T>& rhs) :
-		MultiPool<cl::Buffer, BufferKey<T> >(rhs),
-		_context(rhs._context) {}
-
-
-	BufferPool(cl::Context& context) :
-		MultiPool<cl::Buffer, BufferKey<T> >(),
-		_context(context) {}
-
-
-	UnselectedIterator find(size_t nelems, cl_mem_flags flags = CL_MEM_READ_WRITE) {
-		std::vector<UnselectedIterator> ret;
-		find(ret, 1, nelems, flags);
-		return ret.empty() ? SuperType::invalid() : ret[0];
-	}
-
-
-	UnselectedIterator create(size_t nelems, cl_mem_flags flags = CL_MEM_READ_WRITE, void* ptr = NULL) {
-		std::vector<UnselectedIterator> ret;
-		create(ret, 1, nelems, flags, ptr);
-		return ret.empty() ? SuperType::invalid() : ret[0];
-	}
-
-
-	UnselectedIterator findOrCreate(size_t nelems, cl_mem_flags flags = CL_MEM_READ_WRITE, void* ptr = NULL) {
-		std::vector<UnselectedIterator> ret;
-		findOrCreate(ret, 1, nelems, flags, ptr);
-		return ret.empty() ? SuperType::invalid() : ret[0];
-	}
-
-
-	inline UnselectedIterator find(BufferKey<T> key) {
-		return find(key.nelems(), key.flags());
-	}
-
-
-	inline UnselectedIterator create(BufferKey<T> key, void* ptr = NULL) {
-		return create(key.nelems(), key.flags(), ptr);
-	}
-
-
-	inline UnselectedIterator findOrCreate(BufferKey<T> key, void* ptr = NULL) {
-		return findOrCreate(key.nelems(), key.flags(), ptr);
-	}
-
-
-	template <class C> C& find(C& ret, size_t nbufs, size_t nelems, cl_mem_flags flags = CL_MEM_READ_WRITE) {
-		size_t count = 0;
-		typename SuperType::SelectionList unselected = SuperType::unselected();
-
-		for (UnselectedIterator it = unselected.begin(); it != unselected.end() && count < nbufs; ++it) {
-			BufferKey<T> it_key = *it;
-			BufferKey<T> pm_key(nelems, flags);
-
-			if (it_key == pm_key) {
-				ret.insert(ret.end(), it);
-				++count;
-			}
+		while (totalRangeSize(localDims2) > deviceMaxGroupSize) {
+			std::vector<size_t>::iterator max_elem = std::max_element(localDims2.begin(), localDims2.end());
+			*max_elem >>= 1;
 		}
 
-		return ret;
-	}
-
-
-	template <class C> C& create(C& ret, size_t nbufs, size_t nelems, cl_mem_flags flags = CL_MEM_READ_WRITE, void* ptr = NULL) {
-		for (size_t i = 0; i < nbufs; ++i) {
-			cl::Buffer buf(_context, flags, nelems * sizeof(ElemType), ptr);
-			ret.insert(ret.end(), SuperType::addNew(buf));
-		}
-		return ret;
-	}
-
-
-	template <class C> C& findOrCreate(C& ret, size_t nbufs, size_t nelems, cl_mem_flags flags = CL_MEM_READ_WRITE, void* ptr = NULL) {
-		find(ret, nbufs, nelems, flags);
-		if (nbufs > ret.size())
-			create(ret, nbufs - ret.size(), nelems, flags, ptr);
-		return ret;
-	}
-
-
-	template <class C> inline C& find(C& ret, size_t nbufs, BufferKey<T> key) {
-		return find(ret, nbufs, key.nelems(), key.flags());
-	}
-
-
-	template <class C> inline C& create(C& ret, size_t nbufs, BufferKey<T> key, void* ptr = NULL) {
-		return create(ret, nbufs, key.nelems(), key.flags(), ptr);
-	}
-
-
-	template <class C> inline C& findOrCreate(C& ret, size_t nbufs, BufferKey<T> key, void* ptr = NULL) {
-		return findOrCreate(ret, nbufs, key.nelems(), key.flags(), ptr);
-	}
-
-
-	cl::Context& context() {
-		return _context;
-	}
-
-
-	BufferPool<T>* clone() {
-		throw Error("Not implemented.");
-	}
-
-
-private:
-	cl::Context _context;
-};
-
-
-class DevicePool;
-
-
-class QueuePool : public ListPool<cl::CommandQueue> {
-public:
-	QueuePool() : ListPool<cl::CommandQueue>() {}
-
-
-	QueuePool(const QueuePool& rhs) :
-		ListPool<cl::CommandQueue>(rhs),
-		_context(rhs._context),
-		_device(rhs._device) {}
-
-
-	QueuePool(cl::Context& context, cl::Device& device) :
-		ListPool<cl::CommandQueue>(),
-		_context(context),
-		_device(device) {}
-
-
-	Iterator find(cl_command_queue_properties properties = 0) {
-		std::vector<Iterator> ret;
-		find(ret, 1, properties);
-		return ret.empty() ? invalid() : ret[0];
-	}
-
-
-	Iterator create(cl_command_queue_properties properties = 0) {
-		std::vector<Iterator> ret;
-		create(ret, 1, properties);
-		return ret.empty() ? invalid() : ret[0];
-	}
-
-
-	Iterator findOrCreate(cl_command_queue_properties properties = 0) {
-		std::vector<Iterator> ret;
-		findOrCreate(ret, 1, properties);
-		return ret.empty() ? invalid() : ret[0];
-	}
-
-
-	template <class C> C& find(C& ret, size_t nqueues, cl_command_queue_properties properties = 0) {
-		Container& ctnr = unselected();
-		size_t count = 0;
-
-		for (Iterator it = ctnr.begin(); it != ctnr.end() && count < nqueues; ++it) {
-			if (it->getInfo<CL_QUEUE_PROPERTIES>() == properties) {
-				ret.insert(ret.end(), it);
-				++count;
-			}
+		while (totalRangeSize(localDims3) > deviceMaxGroupSize) {
+			std::vector<size_t>::iterator max_elem = std::max_element(localDims3.begin(), localDims3.end());
+			*max_elem >>= 1;
 		}
 
-		return ret;
-	}
-
-
-	template <class C> C& create(C& ret, size_t nqueues, cl_command_queue_properties properties = 0) {
-		for (size_t i = 0; i < nqueues; ++i) {
-			Type queue(_context, _device, properties);
-			Iterator it = addNew(queue);
-			ret.insert(ret.end(), it);
-		}
-		return ret;
-	}
-
-
-	template <class C> C& findOrCreate(C& ret, size_t nqueues, cl_command_queue_properties properties = 0) {
-		find(ret, nqueues, properties);
-		if (nqueues > ret.size())
-			create(ret, nqueues - ret.size(), properties);
-		return ret;
-	}
-
-
-	cl::Context& context() {
-		return _context;
-	}
-
-
-	cl::Device& device() {
-		return _device;
-	}
-
-
-	void wait() {
-		Container ctnr = all();
-		for (Iterator it = ctnr.begin(); it != ctnr.end(); ++it)
-			it->finish();
-	}
-
-
-	void flush() {
-		Container ctnr = all();
-		for (Iterator it = ctnr.begin(); it != ctnr.end(); ++it)
-			it->flush();
-	}
-
-
-	QueuePool* clone() {
-		throw Error("Not implemented.");
+		_local1 = cl::NDRange(localDims1[0]);
+		_local2 = cl::NDRange(localDims2[0], localDims2[1]);
+		_local3 = cl::NDRange(localDims3[0], localDims3[1], localDims3[2]);
+		_global1 = cl::NDRange(geMultiple(size, localDims1[0]));
+		_global2 = cl::NDRange(
+			geMultiple(size, localDims2[0]),
+			geMultiple(size, localDims2[1])
+		);
+		_global3 = cl::NDRange(
+			geMultiple(size, localDims3[0]),
+			geMultiple(size, localDims3[1]),
+			geMultiple(size, localDims3[2])
+		);
 	}
 
 private:
-	cl::Context _context;
-	cl::Device _device;
-};
-
-
-class DevicePool : public MapPool<cl::Device, QueuePool, Device_less> {
-public:
-
-	DevicePool() : MapPool<cl::Device, QueuePool, Device_less>() {}
-
-
-	DevicePool(const DevicePool& rhs) : MapPool<cl::Device, QueuePool, Device_less>(rhs) {}
-
-
-	DevicePool(cl::Context& context, std::vector<cl::Device>& devices) :
-		MapPool<cl::Device, QueuePool, Device_less>(),
-		_context(context)
-	{
-		for (std::vector<cl::Device>::iterator it = devices.begin(); it != devices.end(); ++it) {
-			std::map<cl::Device, QueuePool, Device_less>::value_type entry(*it, QueuePool(_context, *it));
-			addNew(entry);
-		}
-	}
-
-	QueuePool& queues() {
-		if (!hasSelected()) {
-			throw Error("No device selected.");
-		}
-		return selected().second;
-	}
-
-
-	QueuePool& queues(Iterator& it) {
-		if (it == invalid()) {
-			throw Error("Invalid iterator.");
-		}
-		return it->second;
-	}
-
-
-	QueuePool& queues(cl::Device& device) {
-		Iterator it = find(device);
-		if (it == invalid()) {
-			throw Error("Device not in the pool.");
-		}
-		return it->second;
-	}
-
-
-	cl::Context& context() {
-		return _context;
-	}
-
-
-	template <class C> C& devices(C& ret) {
-		Container ctnr = all();
-		for (Iterator it = ctnr.begin(); it != ctnr.end(); ++it)
-			ret.insert(ret.end(), it->first);
+	size_t highestPow2(size_t num) {
+		size_t ret = 1;
+		while (ret < num) ret <<= 1;
 		return ret;
 	}
-
-
-	template <class C> C& queuePools(C& ret) {
-		Container ctnr = all();
-		for (Iterator it = ctnr.begin(); it != ctnr.end(); ++it)
-			ret.insert(ret.end(), it->second);
+	size_t geMultiple(size_t size, size_t dimSize) {
+		size_t v = 1;
+		while (v * dimSize < size) ++v;
+		return size * v;
+	}
+	size_t totalRangeSize(const std::vector<size_t>& rng) {
+		size_t ret = rng[0];
+		for (std::vector<size_t>::const_iterator it = rng.begin() + 1; it != rng.end(); ++it)
+			ret *= *it;
 		return ret;
 	}
-
-
-	void wait() {
-		Container ctnr = all();
-		for (Iterator it = ctnr.begin(); it != ctnr.end(); ++it)
-			it->second.wait();
+	size_t ndrangeSize(const cl::NDRange& rng) const {
+		const size_t* data = rng;
+		size_t sz = data[0];
+		for (size_t i = 1; i < rng.dimensions(); ++i)
+			sz *= data[i];
+		return sz;
 	}
-
-
-	void flush() {
-		Container ctnr = all();
-		for (Iterator it = ctnr.begin(); it != ctnr.end(); ++it)
-			it->second.flush();
-	}
-
-
-	DevicePool* clone() {
-		throw Error("Not implemented.");
-	}
-
 private:
-	cl::Context _context;
+	size_t _elemSize;
+	cl::NDRange _local1;
+	cl::NDRange _local2;
+	cl::NDRange _local3;
+	cl::NDRange _global1;
+	cl::NDRange _global2;
+	cl::NDRange _global3;
 };
 
 
 template <typename T> class State {
 public:
-	typedef ukoct::impl::opencl::ImplData<T> ImplData;
-	typedef ukoct::impl::opencl::Operator<T> OperatorType;
-	typedef std::map<ukoct::EOperation, OperatorType> OperatorMap;
-	typedef typename OperatorMap::iterator OperatorIterator;
-
 
 	State() :
 		_valid(false),
 		_size(0),
-		_rowMajor(true) {}
+		_ranges(),
+		_rowMajor(true),
+		_context(),
+		_program(),
+		_device(),
+		_queues(),
+		_mat(),
+		_aux(),
+		_val() {}
 
 
-	void setup(cl::Program& program, size_t diffSize, const std::string sourceFilename = "") {
+	State(const State<T>& rhs) :
+		_valid(rhs._valid),
+		_size(rhs._size),
+		_ranges(rhs._ranges),
+		_rowMajor(rhs._rowMajor),
+		_context(rhs._context),
+		_program(rhs._program),
+		_device(rhs._device),
+		_queues(rhs._queues),
+		_mat(rhs._mat),
+		_aux(rhs._aux),
+		_val(rhs._val) {}
+
+
+	void setup(cl::Program& program, size_t size, bool rowMajor = true, T* data = NULL, cl_mem_flags flags = 0) {
+		std::vector<cl::Device> devices = _program.getInfo<CL_PROGRAM_DEVICES>();
+
+		if (devices.empty())
+			throw Error("No available device in the program info.");
+
+		if (_size % 2 == 0 && _size > 1)
+			throw Error("Incorrect size for DBM. Size must be greater than 1 and a multiple of 2.");
+
+		if (_program.getBuildInfo<CL_PROGRAM_BUILD_STATUS>(devices[0]) != CL_BUILD_SUCCESS)
+			throw Error("Program not built.");
+
 		_program = program;
+		_size = size;
 		_context = _program.getInfo<CL_PROGRAM_CONTEXT>();
-		_devices = _program.getInfo<CL_PROGRAM_DEVICES>();
-		_size = diffSize;
-		_sourceFilename = sourceFilename;
+		_device = devices[0];
+		_val = T();
+		_ranges.calculate(_device, _size, sizeof(T));
+		queues(1);
+		if (data != NULL && flags == 0)
+			flags = CL_MEM_COPY_HOST_PTR;
+		_mat = cl::Buffer(_context, CL_MEM_READ_WRITE | flags, bytesize(), data);
+		_aux = cl::Buffer(_context, CL_MEM_READ_WRITE, auxBytesize());
 
-		if (_size % 2 == 0 && _size > 1 && !_devices.empty()) {
-			_valid = true;
-			_devicePool = DevicePool(_context, _devices);
-		}
+		_valid = true;
 	}
 
+	bool valid() const { return _valid; }
 
-	cl::NDRange globalRange() {
-		return cl::NDRange(_size, _size);
+	size_t size() const { return _size; }
+
+	const OptimizedRangeCalculator& ranges() const { return _ranges; }
+
+	size_t elemsize() const { return _size * _size; }
+
+	size_t auxElemsize() const { return _size * _size * _size; }
+
+	size_t bytesize() const { return elemsize() * sizeof(T); }
+
+	size_t auxBytesize() const { return _ranges().globalElemSize3(); }
+
+	size_t octsize() const { return _size / 2; }
+
+	bool rowMajor() const { return _rowMajor; }
+
+	cl::NDRange globalRange1() const { return cl::NDRange(_size); }
+
+	cl::NDRange globalRange() const { return cl::NDRange(_size, _size); }
+
+	cl::NDRange globalRange3() const { return cl::NDRange(_size, _size, _size); }
+
+	const cl::Context& context() const { return _context; }
+
+	const cl::Program& program() const { return _program; }
+
+	const cl::Device& device() const { return _device; }
+
+	std::vector<cl::CommandQueue>& queues() { return _queues; }
+	const std::vector<cl::CommandQueue>& queues() const { return _queues; }
+	State<T>& queues(const std::vector<cl::CommandQueue>& q) { _queues = q; return *this; }
+	std::vector<cl::CommandQueue>& queues(size_t size) {
+		if (size > _queues.size())
+			for (size_t i = 0; i < size - _queues.size(); ++i) {
+				cl::CommandQueue queue(_context, _device, 0, bytesize());
+				_queues.push_back(queue);
+			}
+		return _queues;
 	}
 
+	//cl::Buffer& mat() { return _mat; }
+	const cl::Buffer& mat() const { return _mat; }
 
-	cl::NDRange globalKRange() {
-		return cl::NDRange(_size, _size, _size);
-	}
+	//cl::Buffer& aux() { return _aux; }
+	const cl::Buffer& aux() const { return _aux; }
 
-
-	cl::NDRange globalK2Range() {
-		return cl::NDRange(_size, _size, _size - 2);
-	}
-
-
-	BufferKey<T> inputBufferKey() {
-		return BufferKey<T>(_size * _size, CL_MEM_READ_WRITE);
-	}
-
-
-	cl::Buffer& inputBuffer() {
-		return _bufferPool.selected(inputBufferKey());
-	}
-
-
-	const std::string& sourceFilename() const {
-		return _sourceFilename;
-	}
-
-
-	const cl::Program& program() {
-		return _program;
-	}
-
-
-	const cl::Context& context() {
-		return _context;
-	}
-
-
-	const std::vector<cl::Device>& devices() {
-		return _devices;
-	}
-
-
-	DevicePool& devicePool() {
-		return _devicePool;
-	}
-
-
-	BufferPool<T>& bufferPool() {
-		return _bufferPool;
-	}
-
-
-	std::map<EOperation, OperatorType>& operators() {
-		return _operators;
-	}
-
-
-	bool valid() {
-		return _valid;
-	}
-
-
-	size_t size() {
-		return _size;
-	}
-
-
-	size_t octSize() {
-		return _size / 2;
-	}
-
-
-	T hugeval() {
-		return ImplData::hugeval();
-	}
-
-
-	bool rowMajor() {
-		return _rowMajor;
-	}
-
-
-	State<T>* clone() {
-#if 0
-		State<T>* ret = new State<T>();
-		ret->_valid = _valid;
-		ret->_size = _size;
-		ret->_program = _program;
-		ret->_context = _context;
-		ret->_devicePool = _devicePool.clone();
-		ret->_bufferPool = _bufferPool.clone();
-		for (std::map<EOperation, Operator<T> >::iterator it = _operators.begin(); it != _operators.end(); ++it) {
-			ret->_operators[it->first] = it->second.copy();
-		}
-		return ret;
-#endif
-		throw Error("Not implemented.");
-	}
+	T& val() { return _val; }
+	const T& val() const { return _val; }
+	State<T>& val(T val) { _val = val; return *this; }
+	State<T>& val(const T& val) { _val = val; return *this; }
 
 private:
+	bool _valid;
+	OptimizedRangeCalculator _ranges;
+	size_t _size;
+	bool _rowMajor;
 	cl::Context _context;
 	cl::Program _program;
-	DevicePool _devicePool;
-	BufferPool<T> _bufferPool;
-	std::vector<cl::Device> _devices;
-	std::map<EOperation, OperatorType> _operators;
-	bool _valid;
-	bool _rowMajor;
-	size_t _size;
-	std::string _sourceFilename;
+	cl::Device _device;
+	std::vector<cl::CommandQueue> _queues;
+	cl::Buffer _mat;
+	cl::Buffer _aux;
+	T _val;
 };
+
+
+typedef void (*FContextCallback)(const char* message, const void* data, size_t dataSize, void* userData);
+
+
+static cl::Context createContext(size_t numDevices = 0, cl_device_type deviceType = CL_DEVICE_TYPE_ALL, FContextCallback callback = NULL, void* callbackData = NULL) {
+	std::vector<cl::Platform> platforms;
+	cl::Platform::get(&platforms);
+	if (platforms.empty())
+		throw Error("No OpenCL Platform found, please check your OpenCL installation.");
+
+	bool foundDevice = false;
+	std::vector<cl::Device> devices;
+	for (std::vector<cl::Platform>::iterator it = platforms.begin(); !foundDevice && it != platforms.end(); ++it) {
+		cl::Platform platform = *it;
+		std::vector<cl::Device> platformDevices;
+		platform.getDevices(deviceType, &platformDevices);
+
+		if (!platformDevices.empty() && platformDevices.size() >= numDevices) {
+			foundDevice = true;
+			if (numDevices == 0)
+				numDevices = platformDevices.size();
+			devices.insert(devices.end(), platformDevices.begin(), platformDevices.begin() + numDevices);
+		}
+	}
+	if (!foundDevice)
+		throw Error("Could not find available/enough devices.");
+
+	cl::Context context(devices, NULL, callback, callbackData);
+	return context;
+}
+
+
+static cl::Program createProgramFromSource(cl::Context context, const char* source, size_t sourceSize, const char* options) {
+	std::vector<cl::Device> devices = context.getInfo<CL_CONTEXT_DEVICES>();
+
+	if (devices.empty())
+		throw Error("No device available in context.");
+
+	cl::Program::Sources sources;
+	sources.push_back(std::make_pair(source, sourceSize));
+	cl::Program program(context, sources);
+	program.build(devices, options);
+	for (auto& device : devices) {
+		if (program.getBuildInfo<CL_PROGRAM_BUILD_STATUS>(device) != CL_BUILD_SUCCESS) {
+			std::stringstream ss;
+			ss
+				<< "Program could not be built for device \"" << device.getInfo<CL_DEVICE_NAME>() << "\"."
+				<< " Status: " << program.getBuildInfo<CL_PROGRAM_BUILD_STATUS>(device)
+				<< ", Options: " << program.getBuildInfo<CL_PROGRAM_BUILD_OPTIONS>(device)
+				<< ", Log: \"" << program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device) << "\".";
+			throw Error(ss.str());
+		}
+	}
+
+	return program;
+}
+
+
+static cl::Program createProgramFromSource(cl::Context context, std::string source, const char* options = NULL) {
+	return createProgramFromSource(context, source.c_str(), source.length(), options);
+}
+
+
+static cl::Program createProgramFromSource(cl::Context context, const std::string& source, const char* options = NULL) {
+	return createProgramFromSource(context, source.c_str(), source.length(), options);
+}
 
 
 }

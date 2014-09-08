@@ -148,9 +148,17 @@ def clsources(ctx):
 	# TODO Use regex instead
 	# this is a poor-man's hack, it relies on the assumption that files
 	# start and end with parenthesis. Put a comment before, and you generate
-	# wrong code.
+	# wrong code. But the source is under my control anyways.
+	float_srcfolder = ctx.path.find_node(inc + "/ukoct/opencl/float/sources")
 	common_clsources = ctx.path.ant_glob(inc + "/ukoct/opencl/common/**/*.cl")
-	float_clsources = ctx.path.ant_glob(inc + "/ukoct/opencl/float/**/*.cl")
+	float_clsources = [
+		float_srcfolder.find_node("defs.inc.cl"),
+		float_srcfolder.find_node("coherent.inc.cl"),
+		float_srcfolder.find_node("consistent.inc.cl"),
+		float_srcfolder.find_node("intConsistent.inc.cl"),
+		float_srcfolder.find_node("closed.inc.cl"),
+		float_srcfolder.find_node("stronglyClosed.inc.cl"),
+	]
 	float_clsource = []
 	for node in common_clsources:
 		source = node.read()
@@ -160,6 +168,9 @@ def clsources(ctx):
 		float_clsource.append(source[source.find("(") + 1 : source.rfind(")")])
 	ctx.path.make_node("float.cl").write(''.join(float_clsource))
 
+
+def generate_operator(ctx):
+	pass
 
 #def distclean(ctx):
 #	import shutil

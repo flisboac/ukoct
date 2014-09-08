@@ -1,3 +1,5 @@
+#define __CL_ENABLE_EXCEPTIONS
+
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -48,8 +50,95 @@ enum EOption {
 	, PRINTFML    // -p      Prints the input system
 	, NOSOLVE     // -A      Don't try to solve the system
     , TIMELIMIT   // -t=NUM  Specifies the time limit, in seconds
-    , PRINTMAP    // -m      Prints the solution (always before the system formulae)
+    //, PRINTMAP    // -m      Prints the solution (always before the system formulae)
     , SOLFILE     // -s=FILE Provides an input solution file (for checking SAT with a given system input)
+
+    , CLSOURCE    // -f=FILE Specify an input OpenCL source file for the specified type
+    , CLBINARY    // -F=FILE Specify an input OpenCL binary file for the specified type
+    , CLPRINTSRC  // --cl-print-source
+    , ELEMTYPE    // -T=TYPE Specify the element type to be used (float, double, half, etc)
+    , EXECTYPE    // -e=SOLV Specify the solver to be used (CPU, OpenCL, etc)
+    , CLDEVID     // --cl-device-id=ID
+    , CLPLATID    // --cl-platform-id=ID
+    , CLPROGFLAGS // --cl-program-flags=FLAGS
+};
+
+enum EExecType {
+	EXEC_NONE,
+	EXEC_MIN,
+	EXEC_CPU = EXEC_MIN,
+	EXEC_OPENCL,
+	EXEC_MAX = EXEC_OPENCL
+};
+
+enum EElemType {
+	ELEM_NONE,
+	ELEM_MIN,
+	ELEM_HALF = ELEM_MIN,
+	ELEM_FLOAT,
+	ELEM_DOUBLE,
+	ELEM_LDOUBLE,
+	ELEM_MAX = ELEM_LDOUBLE
+};
+
+struct ElemType {
+	static const std::string names[];
+
+	static EElemType find(const std::string& name) {
+		EElemType i;
+		for (int i = ELEM_MAX; i > ELEM_NONE; ++i)
+			if (name.compare(names[i]) == 0)
+				break;
+		return i;
+	}
+
+	ElemType() : _type(ELEM_NONE) {}
+	ElemType(const ElemType& rhs) = default;
+	ElemType(EElemType id) : _type(id) {}
+	ElemType(const std::string& name) : _type(find(name)) {}
+	EElemType type() const { return _type; }
+	bool valid() const { return _type >= ELEM_MAX && _type <= ELEM_MAX; }
+	const std::string& name() const { return names[_type]; }
+
+private:
+	EElemType _type;
+};
+
+const std::string ElemType::names[] = {
+	/* ELEM_NONE    */ std::string(""),
+	/* ELEM_HALF    */ std::string("half"),
+	/* ELEM_FLOAT   */ std::string("float"),
+	/* ELEM_DOUBLE  */ std::string("double"),
+	/* ELEM_LDOUBLE */ std::string("ldouble"),
+};
+
+struct ExecType {
+	static const std::string names[];
+
+	static EExecType find(const std::string& name) {
+		EExecType i = EXEC_NONE;
+		for (int i = EXEC_MAX; i <= EXEC_NONE; ++i)
+			if (name.compare(names[i]) == 0)
+				break;
+		return i;
+	}
+
+	ExecType() : _type(EXEC_NONE) {}
+	ExecType(const ExecType& rhs) = default;
+	ExecType(EExecType id) : _type(id) {}
+	ExecType(const std::string& name) : _type(find(name)) {}
+	EExecType type() const { return _type; }
+	bool valid() const { return _type >= EXEC_MIN && _type <= EXEC_MAX; }
+	const std::string& name() const { return names[_type]; }
+
+private:
+	EExecType _type;
+};
+
+const std::string ExecType::names[] = {
+	/* EXEC_NONE   */ std::string(""),
+	/* EXEC_CPU    */ std::string("cpu"),
+	/* EXEC_OPENCL */ std::string("opencl")
 };
 
 struct OptionDescriptor {
@@ -68,17 +157,25 @@ struct OptionDescriptor {
 
 const OptionDescriptor descriptors[] = {
 // It's EXTREMELY IMPORTANT that the order of declarations corresponds to the one in the enum EOption
-/*{ TYPE,       REQUIRED, NUM, ARGSEP, VALIDT, SHORT, LONG,         DEFVAL, HELP }*/
-  { HELP,       false,    0,   '\0',   NULL,   "-h",  "--help",     "",     "Show this help content." }
-, { VERSION,    false,    0,   '\0',   NULL,   NULL,  "--version",  "",     "Shows version information." }
-, { VERBOSE,    false,    0,   '\0',   NULL,   "-v",  "--verbose",  "",     "Sets verbose mode (Verbosity = 1)."}
-, { DEBUG,      false,    0,   '\0',   NULL,   "-vv", "--debug",    "",     "Sets debug mode (Verbosity = 2)."}
-, { PRINTFML,   false,    0,   '\0',   NULL,   "-p",  "--printfml", "",     "Prints the formula in the output file (after the results)."}
-, { NOSOLVE,    false,    0,   '\0',   NULL,   "-A",  "--no-solve", "",     "Don't solve the formula. Useful with `-p`."}
-, { TIMELIMIT,  false,    1,   '\0',   NULL,   "-t",  "--maxtime",  "",     "Sets the maximum execution time, in seconds."}
-, { PRINTMAP,   false,    0,   '\0',   NULL,   "-m",  "--printmap", "",     "Prints the partial map."}
-, { SOLFILE,    false,    1,   '\0',   NULL,   "-s",  "--solfile",  "",     "Specifies a solution file to open."}
-, { NONE,       false,    0,   '\0',   NULL,   NULL,  NULL,         NULL,   NULL }
+/*{ ELEMTYPE, REQUIRED,  NUM, ARGSEP, VALIDT,  SHORT,                 LONG,    DEFVAL, HELP }*/
+  { HELP,        false,    0,   '\0',   NULL,   "-h",  "--help",                   "", "Show this help content." }
+, { VERSION,     false,    0,   '\0',   NULL,   NULL,  "--version",                "", "Shows version information." }
+, { VERBOSE,     false,    0,   '\0',   NULL,   "-v",  "--verbose",                "", "Sets verbose mode (Verbosity = 1)."}
+, { DEBUG,       false,    0,   '\0',   NULL,   "-vv", "--debug",                  "", "Sets debug mode (Verbosity = 2)."}
+, { PRINTFML,    false,    0,   '\0',   NULL,   "-p",  "--printfml",               "", "Prints the formula in the output file (after the results)."}
+, { NOSOLVE,     false,    0,   '\0',   NULL,   "-A",  "--no-solve",               "", "Don't solve the formula. Useful with `-p`."}
+, { TIMELIMIT,   false,    1,   '\0',   NULL,   "-t",  "--maxtime",                "", "Sets the maximum execution time, in seconds."}
+//, { PRINTMAP,    false,    0,   '\0',   NULL,   "-m",  "--printmap",            "",  "Prints the partial map."}
+, { SOLFILE,     false,    1,   '\0',   NULL,   "-s",  "--solfile",                "", "Specifies a solution file to open."}
+, { CLSOURCE,    false,    1,   '\0',   NULL,   "-f",  "--cl-source",              "", "Specify an input OpenCL source file for the specified type."}
+, { CLBINARY,    false,    1,   '\0',   NULL,   "-F",  "--cl-binary",              "", "Specify an input OpenCL binary file for the specified type."}
+, { CLPRINTSRC,  false,    0,   '\0',   NULL,   NULL,  "--cl-print-sources",       "", "Prints the OpenCL source code used for the specified element type."}
+, { ELEMTYPE,    false,    1,   '\0',   NULL,   "-T",  "--elem-type",         "float", "Specify the element type to be used (float, double, half, etc)."}
+, { EXECTYPE,    false,    1,   '\0',   NULL,   "-e",  "--exec-type",        "opencl", "Specify the solver to be used (CPU, OpenCL, etc)."}
+, { CLDEVID,     false,    1,   '\0',   NULL,   NULL,  "--cl-device-type",         "", "Specify the device ID to be used on OpenCL execution."}
+, { CLPLATID,    false,    1,   '\0',   NULL,   NULL,  "--cl-platform-type",       "", "Specify the platform ID to be used on OpenCL execution."}
+, { CLPROGFLAGS, false,    1,   '\0',   NULL,   NULL,  "--cl-program-flags",       "", "Specify the OpenCL program build flags."}
+, { NONE,        false,    0,   '\0',   NULL,   NULL,  NULL,                     NULL, NULL }
 };
 
 // Option state
@@ -96,6 +193,14 @@ struct ArgState {
 	std::string inputname;
 	std::string outputname;
 	std::string solname;
+	std::string clsourcename;
+	std::string clbinaryname;
+	bool clprintsrc;
+	int cldeviceid;
+	int clplatformid;
+	std::string clprogramflags;
+	ElemType elemtype;
+	ExecType exectype;
 
 	ArgState()
 		: exitcode(RETOK)
@@ -105,6 +210,9 @@ struct ArgState {
 		, solvingfml(true)
         , printingmap(false)
         , maxtime(0)
+        , clprintsrc(false)
+		, cldeviceid(-1)
+		, clplatformid(-1)
 	{}
 
 	int isset(EOption option) { return optparser.isSet(descriptors[option].getname()); }
@@ -113,6 +221,7 @@ struct ArgState {
 	bool isverbose() { return isdebug() || verboselvl == VERBOSE; }
 };
 
+static bool openifile(ArgState& arg, const std::string& name, std::istream*& s, std::ifstream& is, std::stringstream& sbuf, const char* filetype = "input");
 static int evalresult(ArgState& arg);
 static void printhelp(ArgState& arg);
 static void printversion(ArgState& arg);
@@ -130,149 +239,127 @@ int main(int argc, const char** argv) {
     std::set_terminate(__gnu_cxx::__verbose_terminate_handler);
 #endif
     
-    // TODO PLEASE DELETE THIS LINE
-    std::cout << ukoct::impl::opencl::ImplData<float>::source() << std::endl;
-
 	if ( arg.isset(HELP) ) {
 		printhelp(arg);
 		return RETOK;
 
-	} else if ( arg.isset(VERSION) ) {
+	} else if (arg.isset(VERSION) ) {
 		printversion(arg);
 		return RETOK;
 	}
 
-	if (checkargs(arg)) {
-		bool keepgoing = true;
-        int sat = 0;
+    try {
+    	if (checkargs(arg)) {
+    		bool keepgoing = true;
+            int sat = 0;
 
-        /*
-		uksat::CnfFormula cnf;
-        uksat::SimpleDpllSolver simplesolver(cnf);
-        uksat::WatchedDpllSolver watchedsolver(cnf);
-        uksat::Solver& solver = arg.watchinglits ? watchedsolver : simplesolver;
-        
-		// Setting configuration
-        if (arg.maxtime) solver.setmaxtime(static_cast<double>(arg.maxtime));
-        if (arg.isverbose()) solver.setlogstream(std::cerr);
-        if (arg.isdebug()) solver.addlogtype(uksat::LOG_ALL);
-        */
-        
-		// Input and output
-		std::istream* is = NULL;
-		std::ostream* os = NULL;
-        std::istream* ss = NULL;
-		std::stringstream ibuf;
-		std::stringstream sbuf;
-		std::ifstream ifile;
-		std::ofstream ofile;
-        std::ifstream sfile;
+    		// Input and output
+    		std::istream* is = NULL;
+    		std::ostream* os = NULL;
+            std::istream* ss = NULL;
+            std::istream* cs = NULL;
+    		std::stringstream ibuf;
+    		std::stringstream sbuf;
+    		std::stringstream cbuf;
+    		std::ifstream ifile;
+    		std::ofstream ofile;
+            std::ifstream sfile;
+            std::ifstream cfile;
 
-		// Opening input file
-		if (arg.inputname.compare("-") == 0) {
-			std::string buf;
-			is = &ibuf;
-			while (std::getline(std::cin, buf)) {
-				ibuf << buf << std::endl;
-			}
+    		// Opening input file
+            keepgoing = openifile(arg, arg.inputname, is, ifile, ibuf, "input");
 
-		} else {
-			is = &ifile;
-			ifile.open(arg.inputname.c_str());
+    		// Opening output file
+    		if (arg.outputname.compare("-") == 0) {
+    			os = &std::cout;
 
-			if (!ifile.is_open()) {
-				std::cerr << "ERROR: Could not open input file \"" << arg.inputname << "\"." << std::endl;
-				arg.exitcode = RETERR;
-				keepgoing = false;
-			}
-		}
+    		} else if (!arg.outputname.empty()) {
+    			os = &ofile;
+    			ofile.open(arg.outputname.c_str());
 
-		// Opening output file
-		if (arg.outputname.compare("-") == 0) {
-			os = &std::cout;
+    			if (!ofile.is_open()) {
+    				std::cerr << "ERROR: Could not open output file \"" << arg.outputname << "\"." << std::endl;
+    				arg.exitcode = RETERR;
+    				keepgoing = false;
+    			}
+    		}
 
-		} else if (!arg.outputname.empty()) {
-			os = &ofile;
-			ofile.open(arg.outputname.c_str());
+            // Opening solution file
+            if (keepgoing && !arg.solname.empty()) {
+            	keepgoing = openifile(arg, arg.solname, ss, sfile, sbuf, "solution");
+    		}
 
-			if (!ofile.is_open()) {
-				std::cerr << "ERROR: Could not open output file \"" << arg.outputname << "\"." << std::endl;
-				arg.exitcode = RETERR;
-				keepgoing = false;
-			}
-		}
-        
-        // Opening solution file
-        if (keepgoing && !arg.solname.empty()) {
-            if (arg.inputname.compare("-") == 0) {
-                std::string buf;
-                is = &sbuf;
-                while (std::getline(std::cin, buf)) {
-                    sbuf << buf << std::endl;
+            // Opening solution file
+            if (keepgoing) {
+            	if (!arg.clbinaryname.empty()) {
+            		keepgoing = openifile(arg, arg.clbinaryname, cs, cfile, cbuf, "OpenCL binary");
+
+            	} else if (!arg.clsourcename.empty()) {
+            		keepgoing = openifile(arg, arg.clsourcename, cs, cfile, cbuf, "OpenCL source");
+            	}
+    		}
+            /*
+    		// Loading formula
+    		if (keepgoing && !cnf.openfile(*is)) {
+    			std::cerr << "ERROR: Could not load the formula, or the formula is invalid." << std::endl;
+    			keepgoing = false;
+    		}
+
+    		// Writing summary of current run and solving formula
+    		if (keepgoing) {
+    			printsummary(arg, cnf, solver);
+    			if (arg.solvingfml) {
+                    solver.query();
+                    sat = solver.issatisfied() ? 1 : (solver.isconflicting() ? -1 : 0);
+
+                } else {
+                    sat = solver.apply();
                 }
+    		}
+    		*/
+
+
+    		// Writing results to the output file, if asked to
+    		if (keepgoing && (arg.printingmap || arg.printingfml) && os) {
+    			/*
+    			const std::time_put<char>& tmput = std::use_facet <std::time_put<char> > (os->getloc());
+    			std::time_t timestamp;
+    		    std::time ( &timestamp );
+    		    std::tm * now = std::localtime ( &timestamp );
+    		    std::string pattern ("c Solved with " ukoct_RELEASENAME ", date: %I:%M%p\n");
+    		    tmput.put(*os, *os, ' ', now, pattern.data(), pattern.data() + pattern.length());
+
+                if (arg.printingmap) {
+                    cnf.savesolution(*os, solver);
+    			}
                 
-            } else {
-                sfile.open(arg.solname.c_str());
+    			if (arg.printingfml) {
+    				cnf.savefile(*os);
+    			}
+    			*/
+    		}
 
-                if (!sfile.is_open()) {
-                    std::cerr << "ERROR: Could not open solution file \"" << arg.solname << "\"." << std::endl;
-                    arg.exitcode = RETERR;
-                    keepgoing = false;
-                }
-            }
-		}
-        
-        /*
-		// Loading formula
-		if (keepgoing && !cnf.openfile(*is)) {
-			std::cerr << "ERROR: Could not load the formula, or the formula is invalid." << std::endl;
-			keepgoing = false;
-		}
+    		// Printing summary and setting final result
+    		if (keepgoing) {
+                evalresult(arg);
+    			printresults(arg);
+    		}
 
-		// Writing summary of current run and solving formula
-		if (keepgoing) {
-			printsummary(arg, cnf, solver);
-			if (arg.solvingfml) {
-                solver.query();
-                sat = solver.issatisfied() ? 1 : (solver.isconflicting() ? -1 : 0);
-                
-            } else {
-                sat = solver.apply();
-            }
-		}
-		*/
+    		// Closing files, if needed
+    		if (ifile.is_open()) ifile.close();
+    		if (ofile.is_open()) ofile.close();
+    		if (sfile.is_open()) sfile.close();
 
-		// Writing results to the output file, if asked to
-		if (keepgoing && (arg.printingmap || arg.printingfml) && os) {
-			/*
-			const std::time_put<char>& tmput = std::use_facet <std::time_put<char> > (os->getloc());
-			std::time_t timestamp;
-		    std::time ( &timestamp );
-		    std::tm * now = std::localtime ( &timestamp );
-		    std::string pattern ("c Solved with " ukoct_RELEASENAME ", date: %I:%M%p\n");
-		    tmput.put(*os, *os, ' ', now, pattern.data(), pattern.data() + pattern.length());
-            
-            if (arg.printingmap) {
-                cnf.savesolution(*os, solver);
-			}
-            
-			if (arg.printingfml) {
-				cnf.savefile(*os);
-			}
-			*/
-		}
+    	}
 
-		// Printing summary and setting final result
-		if (keepgoing) {
-            evalresult(arg);
-			printresults(arg);
-		}
+    } catch (cl::Error& e) {
+    	std::cerr << "** OPENCL EXCEPTION " << e.err() << "** " << e.what();
+    	exit(RETERR);
 
-		// Closing files, if needed
-		if (ifile.is_open()) ifile.close();
-		if (ofile.is_open()) ofile.close();
-		if (sfile.is_open()) sfile.close();
-	}
+    } catch (ukoct::Error& e) {
+    	std::cerr << "** EXCEPTION " << e.code() << "** " << e.what();
+    	exit(RETERR);
+    }
 
 	return arg.exitcode;
 }
@@ -377,14 +464,62 @@ bool checkargs(ArgState& arg) {
             arg.maxtime = maxtime;
         }
         
+        /*
 		if (arg.isset(PRINTMAP)) {
 			arg.printingmap = true;
 		}
+		*/
         
         if (arg.isset(SOLFILE)) {
             std::string solfilename;
-            arg.get(TIMELIMIT)->getString(solfilename);
+            arg.get(SOLFILE)->getString(solfilename);
             arg.solname = solfilename;
+        }
+
+        if (arg.isset(CLSOURCE)) {
+            std::string name;
+            arg.get(CLSOURCE)->getString(name);
+            arg.clsourcename = name;
+        }
+
+        if (arg.isset(CLBINARY)) {
+            arg.get(CLBINARY)->getString(arg.clbinaryname);
+        }
+
+        if (arg.isset(CLPRINTSRC)) {
+            arg.clprintsrc = true;
+        }
+
+        if (arg.isset(ELEMTYPE)) {
+        	std::string name;
+        	arg.get(ELEMTYPE)->getString(name);
+        	arg.elemtype = ElemType(name);
+        }
+
+        if (arg.isset(EXECTYPE)) {
+        	std::string name;
+        	arg.get(EXECTYPE)->getString(name);
+        	arg.exectype = ExecType(name);
+        }
+
+        if (arg.isset(CLDEVID)) {
+        	arg.get(CLDEVID)->getInt(arg.cldeviceid);
+        	if (arg.cldeviceid < 0) {
+        		std::cerr << "ERROR: Device ID must be greater than or equal to 0.";
+        		return RETEARG;
+        	}
+        }
+
+        if (arg.isset(CLPLATID)) {
+        	arg.get(CLPLATID)->getInt(arg.clplatformid);
+        	if (arg.clplatformid < 0) {
+        		std::cerr << "ERROR: Platform ID must be greater than or equal to 0.";
+        		return RETEARG;
+        	}
+        }
+
+        if (arg.isset(CLPROGFLAGS)) {
+        	arg.get(EXECTYPE)->getString(arg.clprogramflags);
         }
 
 	} else {
@@ -418,6 +553,30 @@ int evalresult(ArgState& arg) {
     arg.resultstr = str;
     
     return ret;
+}
+
+bool openifile(ArgState& arg, const std::string& name, std::istream*& s, std::ifstream& is, std::stringstream& sbuf, const char* filetype) {
+	bool keepgoing = true;
+
+    if (name.compare("-") == 0) {
+    	s = &sbuf;
+        std::string buf;
+        while (std::getline(std::cin, buf)) {
+            sbuf << buf << std::endl;
+        }
+
+    } else if (!name.empty()) {
+    	s = &is;
+        is.open(name.c_str());
+
+        if (!is.is_open()) {
+            std::cerr << "ERROR: Could not open " << filetype << " file \"" << name << "\"." << std::endl;
+            arg.exitcode = RETERR;
+            keepgoing = false;
+        }
+    }
+
+    return keepgoing;
 }
 
 void printhelp(ArgState& arg) {
