@@ -51,7 +51,11 @@ BUILDS = {
 		APPNAME: {
 			'features': 'cxx cxxprogram', # e.g. 'cxx cxxprogram',
 			'use': ['OPENCL'],
-			'source': [src + '/main.cpp'],
+			'source': [
+				src + '/main.cpp',
+				src + '/mainData.cpp',
+				src + '/mainImpl.cpp',
+			],
 		},
 
 		#SPECNAME: {

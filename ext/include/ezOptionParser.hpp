@@ -331,7 +331,7 @@ static char** CommandLineToArgvA(char* CmdLine, int* _argc) {
   i = 0;
   j = 0;
 
-  while( a = CmdLine[i] ) {
+  for (a = CmdLine[i]; a; a = CmdLine[i]) {
     if(in_QM) {
       if( (a == '\"') ||
           (a == '\'')) // rsz. Added single quote.
@@ -929,17 +929,17 @@ bool ezOptionValidator::isValid(const std::string * valueAsString) {
 class OptionGroup {
 public:
   OptionGroup() : delim(0), expectArgs(0), isSet(false), isRequired(false) { }
-
+  OptionGroup(const OptionGroup& rhs) = default;
   ~OptionGroup() {
     int i, j;
     for(i=0; i < flags.size(); ++i)
       delete flags[i];
-
+    for(i=0; i < previousOptions.size(); ++i)
+      delete previousOptions[i];
     flags.clear();
     parseIndex.clear();
     clearArgs();
   };
-
   inline void clearArgs();
   inline void getInt(int&);
   inline void getLong(long&);
@@ -980,6 +980,7 @@ public:
   std::vector< std::vector< std::string* > * > args;
   // Index where each group was parsed from input stream to track order.
   std::vector<int> parseIndex;
+  std::vector<OptionGroup*> previousOptions;
 };
 /* ################################################################### */
 void OptionGroup::clearArgs() {
@@ -1325,6 +1326,7 @@ public:
   inline void add(const char * defaults, bool required, int expectArgs, char delim, const char * help, const char * flag1, const char * flag2, const char * flag3, const char * flag4, ezOptionValidator* validator=0);
   inline bool exportFile(const char * filename, bool all=false);
   inline OptionGroup * get(const char * name);
+  inline OptionGroup* get(int id);
   inline void getUsage(std::string & usage, int width=80, Layout layout=ALIGN);
   inline void getUsageDescriptions(std::string & usage, int width=80, Layout layout=STAGGER);
   inline bool gotExpected(std::vector<std::string> & badOptions);
@@ -1333,6 +1335,7 @@ public:
   inline bool importFile(const char * filename, char comment='#');
   inline int isSet(const char * name);
   inline int isSet(std::string & name);
+  inline int isSet(int id);
   inline void parse(int argc, const char * argv[]);
   inline void prettyPrint(std::string & out);
   inline void reset();
@@ -1764,6 +1767,9 @@ int ezOptionParser::isSet(std::string & name) {
 
   return 0;
 };
+int ezOptionParser::isSet(int id) {
+  return this->groups.size() > id && this->groups[id]->isSet;
+};
 /* ################################################################### */
 OptionGroup * ezOptionParser::get(const char * name) {
   if (optionGroupIds.count(name)) {
@@ -1771,6 +1777,9 @@ OptionGroup * ezOptionParser::get(const char * name) {
   }
 
   return 0;
+};
+OptionGroup * ezOptionParser::get(int id) {
+  return groups[id];
 };
 /* ################################################################### */
 void ezOptionParser::getUsage(std::string & usage, int width, Layout layout) {
