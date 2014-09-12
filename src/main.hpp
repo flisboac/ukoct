@@ -10,6 +10,7 @@
 #define RETOK      0
 #define RETERR     1
 #define RETEARG    2
+#define RETNOTIMPL 3
 #define RETSAT     RETOK
 #define RETUNSAT   20
 #define RETUNDEF   30
@@ -43,23 +44,37 @@
 //
 
 
+enum EStage {
+	STAGE_PREPARE, // Initial stages of object construction.
+	STAGE_PARSE,   // Command-line parsing and gathering of basic (general) options.
+	STAGE_PREINIT, // Execute
+	STAGE_INIT,    // Instantiation of implementation states, matrices and operators.
+	STAGE_RUN,     // Operations' execution.
+	STAGE_FINISH   // Destruction of used objects (implementation states and all the like)
+};
+
+
 enum EAction {
 	ACT_NONE
 	, ACT_HELP
 	, ACT_VERSION
 	, ACT_CLPRINTSRC
 	, ACT_OPER
+
+	, ACT_MIN_ = ACT_HELP
+	, ACT_MAX_ = ACT_OPER
 };
 
 
 enum EOptionGroup {
 	OPTG_NONE
 	, OPTG_GENERAL
-	, OPTG_OPENCL
+	, OPTG_DETAILS
 	, OPTG_OP
 
 	, OPTG_MIN_ = OPTG_GENERAL
 	, OPTG_MAX_ = OPTG_OP
+	, OPTG_LAST = OPTG_OP
 };
 
 
@@ -84,7 +99,6 @@ enum EOption {
     , OPT_CLDEVID     // --cl-device-id=ID
     , OPT_CLPLATID    // --cl-platform-id=ID
     , OPT_CLPROGFLAGS // --cl-program-flags=FLAGS
-    , OPT_CLOPTIMIZE  // --cl-optimize=OPTS[]
     , OPT_CLPRINTSRC  // --cl-print-source=FILE
 
     // Unary Query operators
@@ -125,8 +139,8 @@ enum EOption {
 
 struct OptionGroup {
 	EOptionGroup id;
-	std::string name;
-	std::string help;
+	const char* name;
+	const char* help;
 };
 
 
@@ -181,18 +195,69 @@ enum EVerboseLevel {
 };
 
 
+struct InputStream {
+	std::string fileName;
+	std::istream* stream;
+	std::ifstream* fileStream;       // NOTE: Streams cannot be declared by value if the class is supposed to be
+	std::stringstream* stringStream; // used with a STL container, because streams are neither movable nor copyable.
+	InputStream()
+		: fileName()
+		, stream(NULL)
+		, fileStream(NULL)
+		, stringStream(NULL)
+		{}
+	InputStream(const char* fn)
+		: fileName(fn)
+		, stream(NULL)
+		, fileStream(NULL)
+		, stringStream(NULL)
+		{}
+	InputStream(const InputStream& rhs) = default;
+	~InputStream() {
+		if (fileStream != NULL) delete fileStream;
+		if (stringStream != NULL) delete stringStream;
+	}
+	inline bool isParsed() { return stream != NULL; }
+};
+
+
+struct OutputStream {
+	std::string fileName;
+	std::ostream* stream;
+	std::ofstream* fileStream;       // NOTE: Streams cannot be declared by value if the class is supposed to be
+	std::stringstream* stringStream; // used with a STL container, because streams are neither movable nor copyable.
+	OutputStream()
+		: fileName()
+		, stream(NULL)
+		, fileStream(NULL)
+		, stringStream(NULL)
+		{}
+	OutputStream(const char* fn)
+		: fileName(fn)
+		, stream(NULL)
+		, fileStream(NULL)
+		, stringStream(NULL)
+		{}
+	OutputStream(const OutputStream& rhs) = default;
+	~OutputStream() {
+		if (fileStream != NULL) delete fileStream;
+		if (stringStream != NULL) delete stringStream;
+	}
+	inline bool isParsed() { return stream != NULL; }
+};
+
+
 struct Operand {
 	// General options
 	// OPT_NONE denotes a positional argument
 	int optionId;
 	ez::OptionGroup* ezGroup;
+	std::vector<std::string> args;
 	int parseIndex;
 
 	// For operators
-	std::string fileName;
-	std::istream* stream;
-	std::ifstream *fileStream;       // NOTE: Streams cannot be declared by value if the class is supposed to be
-	std::stringstream *stringStream; // used with a STL container, because streams are neither movable nor copyable.
+	InputStream inputStream;
+	OutputStream outputStream;
 	plas::var_t var;
 	void* diffCons;
 	void* octCons;
@@ -201,11 +266,10 @@ struct Operand {
 	Operand()
 		: optionId(0)
 		, ezGroup(NULL)
-		, parseIndex(0)
-		, fileName()
-		, stream(NULL)
-		, fileStream(NULL)
-		, stringStream(NULL)
+		, args()
+		, parseIndex(-1)
+		, inputStream()
+		, outputStream()
 		, var(0)
 		, diffCons(NULL)
 		, octCons(NULL)
@@ -214,42 +278,37 @@ struct Operand {
 	Operand(const Operand& other)
 		: optionId(other.optionId)
 		, ezGroup(other.ezGroup)
+		, args(other.args)
 		, parseIndex(other.parseIndex)
-		, fileName(other.fileName)
-		, stream(other.stream)
-		, fileStream(other.fileStream)
-		, stringStream(other.stringStream)
+		, inputStream(other.inputStream)
+		, outputStream(other.outputStream)
 		, var(other.var)
 		, diffCons(other.diffCons)
 		, octCons(other.octCons)
 		, state(other.state)
 		{}
-	Operand(const char* fn)
+	Operand(const char* inpf, const char* outf)
 		: optionId(0)
 		, ezGroup(NULL)
-		, parseIndex(0)
-		, fileName(fn)
-		, stream(NULL)
-		, fileStream()
-		, stringStream()
+		, args()
+		, parseIndex(-1)
+		, inputStream(inpf)
+		, outputStream(outf)
 		, var(0)
 		, diffCons(NULL)
 		, octCons(NULL)
 		, state(NULL)
 		{}
-	~Operand() {
-		if (fileStream != NULL) delete fileStream;
-		if (stringStream != NULL) delete stringStream;
-	}
 	inline bool operator<(const Operand& other) {
-		bool ret = options[optionId].group < options[other.optionId].group;
-		ret = ret ? ret : options[optionId].action < options[other.optionId].action;
-		return ret ? ret : ezGroup->parseIndex < other.ezGroup->parseIndex;
+		return compare(other) < 0;
+	}
+	inline int compare(const Operand& other) {
+		int ret = (options[optionId].group > options[other.optionId].group) - (options[optionId].group < options[other.optionId].group);
+		ret = ret != 0 ? ret : (options[optionId].action > options[other.optionId].action) - (options[optionId].action < options[other.optionId].action);
+		return ret != 0 ? ret : (ezGroup->parseIndex > other.ezGroup->parseIndex) - (ezGroup->parseIndex < other.ezGroup->parseIndex);
 	}
 	inline ez::OptionGroup& argGroup() const { return *ezGroup; }
 	inline const Option& option() const { return options[optionId]; }
-	inline bool is_parsed() { return stream != NULL; }
-	inline bool is_initialized() { return state != NULL; }
 };
 
 
@@ -266,55 +325,66 @@ struct NullStream : public std::stringstream {
 	NullStream() { setstate(std::ios_base::badbit); }
 };
 
+static NullStream nullstream;
 
 struct ArgState {
 	ez::ezOptionParser parser;
 	int stage;
 	int exitCode;
-	NullStream nullstream;
 	std::ostream* slog;
 	std::ostream* serr;
 	EVerboseLevel verbose;
 	int maxTime;
-	Operand input;
-	Operand output;
+	Operand inputOperand;
+	Operand outputOperand;
 	ukoct::EImplementation implType;
 	ukoct::EElemType elemType;
 	std::map<ukoct::EOperation, OperDetails> variants;
 	std::vector<Operand> operands;
 	ArgState()
 		: exitCode(0)
-		, stage(0)
-		, verbose(VERB_NORMAL)
+		, stage(STAGE_PREPARE)
+		, verbose(VERB_DEBUG)
 		, maxTime(0)
-		, input("-")
-		, output("-")
+		, inputOperand("-", "")
+		, outputOperand("", "-")
 		, implType(ukoct::IMPL_OPENCL)
 		, elemType(ukoct::ELEM_FLOAT)
-		, slog(&std::clog)
+		, slog(&std::cerr)
 		, serr(&std::cerr)
 		{}
 	inline std::ostream& dbg(bool withHeader = true)  { return verbose >= VERB_DEBUG ? (slog != NULL ? *slog << (withHeader ? ". [DBG] " : "") : nullstream) : nullstream; }
 	inline std::ostream& log(bool withHeader = true)  { return verbose >= VERB_VERBOSE ? (slog != NULL ? *slog << (withHeader ? "- [LOG] " : "") : nullstream) : nullstream; }
-	inline std::ostream& warn(bool withHeader = true) { return verbose >= VERB_VERBOSE ? (slog != NULL ? *slog << (withHeader ? "! [WARN] " : "") : nullstream) : nullstream; }
+	inline std::ostream& warn(bool withHeader = true) { return verbose >= VERB_NORMAL ? (slog != NULL ? *slog << (withHeader ? "! [WARN] " : "") : nullstream) : nullstream; }
 	inline std::ostream& err(bool withHeader = true)  { return verbose >= VERB_NORMAL ? (serr != NULL ? *serr << (withHeader ? "* [ERROR] " : "") : nullstream) : nullstream; }
 	bool initialize();
 	bool parseArgs(int argc, const char** argv);
 	bool parseOperands();
 	void run();
+
+private:
+	bool parseInputOperand(Operand& operand);
+	bool parseOutputOperand(Operand& operand);
+	bool parseInputStream(Operand& operand);
+	bool parseOutputStream(Operand& operand);
 	void printHelp();
 	void printVersion();
-	bool parseOperand(Operand& operand);
 };
 
-typedef void (*FOperationCallback)(ArgState& A, Operand& operand);
 
-extern const FOperationCallback operationCallbacks[ukoct::IMPL_MAX_ + 1][ukoct::ELEM_MAX_ + 1];
+struct IOperationCallback {
+	virtual ~IOperationCallback() {}
+	virtual bool operator()(ArgState& A, Operand& operand) const = 0;
+	virtual void source(std::string& str) const { }
+};
 
-void ocb_cpu_flt(ArgState& A, Operand& operand);
-void ocb_cpu_dbl(ArgState& A, Operand& operand);
-void ocb_cpu_ldbl(ArgState& A, Operand& operand);
-void ocb_opencl_flt(ArgState& A, Operand& operand);
+
+extern const IOperationCallback* operationCallbacks[ukoct::IMPL_MAX_ + 1][ukoct::ELEM_MAX_ + 1];
+
+extern const IOperationCallback* const ocb_cpu_flt;
+extern const IOperationCallback* const ocb_cpu_dbl;
+extern const IOperationCallback* const ocb_cpu_ldbl;
+extern const IOperationCallback* const ocb_opencl_flt;
 
 
 #endif /* MAIN_HPP_ */

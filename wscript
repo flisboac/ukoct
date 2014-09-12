@@ -53,8 +53,9 @@ BUILDS = {
 			'use': ['OPENCL'],
 			'source': [
 				src + '/main.cpp',
-				src + '/mainData.cpp',
-				src + '/mainImpl.cpp',
+				src + '/main_data.cpp',
+				src + '/main_cpu.cpp',
+				src + '/main_opencl.cpp',
 			],
 		},
 

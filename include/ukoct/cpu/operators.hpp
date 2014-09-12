@@ -298,7 +298,7 @@ public:
 
 			// QUESTION: Is it needed to strengthen right after shortest path, as in miné's paper,
 			// or can it be left to closure?
-			//strengthen();
+			// TODO strengthen here.
 		}
 
 		return ret;

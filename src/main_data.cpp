@@ -4,13 +4,13 @@
 const OptionGroup optionGroups[OPTG_MAX_ + 1] = {
   { OPTG_NONE   , NULL               , NULL }
 , { OPTG_GENERAL, "General Options"  , "Options that can be used in any operator or command." }
-, { OPTG_OPENCL , "OpenCL Options"   , "Various options and flags for the OpenCL backend." }
+, { OPTG_DETAILS , "OpenCL Options"   , "Various options and flags for the OpenCL backend." }
 , { OPTG_OP     , "Octagon Operators", "All Octagon domain's operators." }
 };
 
 const Option options[OPT_MAX_ + 1] = {
 //  id              , group       , action        , oper                        , reqd , na, sep , defv    , vald, shrt, long                , help
-  { OPT_INPUT       , OPTG_GENERAL, ACT_NONE      , ukoct::OPER_NONE            ,  true,  1, '\0', "-"     , NULL, NULL,                 NULL, "The input file. Btw, this help content won't appear..." }
+  { OPT_INPUT       , OPTG_GENERAL, ACT_NONE      , ukoct::OPER_NONE            , false,  1, '\0', ""      , NULL, NULL, NULL                , "The input file. Btw, this help content won't appear..." }
 
 // General Options
 , { OPT_HELP        , OPTG_GENERAL, ACT_HELP      , ukoct::OPER_NONE            , false,  0, '\0', ""      , NULL, "-h", "--help"            , "Displays help content." }
@@ -24,43 +24,43 @@ const Option options[OPT_MAX_ + 1] = {
 , { OPT_OPERVARIANT , OPTG_GENERAL, ACT_NONE      , ukoct::OPER_NONE            , false,  2,  ':', ""      , NULL, NULL, "--variant"         , "help" }
 
 // OpenCL options
-, { OPT_CLSOURCE    , OPTG_OPENCL , ACT_NONE      , ukoct::OPER_NONE            , false,  1, '\0', ""      , NULL, NULL, "--cl-source"       , "help" }
-, { OPT_CLBINARY    , OPTG_OPENCL , ACT_NONE      , ukoct::OPER_NONE            , false,  1, '\0', ""      , NULL, NULL, "--cl-binary"       , "help" }
-, { OPT_CLDEVID     , OPTG_OPENCL , ACT_NONE      , ukoct::OPER_NONE            , false,  1, '\0', ""      , "u4", NULL, "--cl-device-id"    , "help" }
-, { OPT_CLPLATID    , OPTG_OPENCL , ACT_NONE      , ukoct::OPER_NONE            , false,  1, '\0', ""      , "u4", NULL, "--cl-platform-id"  , "help" }
-, { OPT_CLPROGFLAGS , OPTG_OPENCL , ACT_NONE      , ukoct::OPER_NONE            , false,  1, '\0', ""      , NULL, NULL, "--cl-program-flags", "help" }
-, { OPT_CLPRINTSRC  , OPTG_OPENCL , ACT_CLPRINTSRC, ukoct::OPER_NONE            , false,  0, '\0', ""      , NULL, NULL, "--cl-print-src"    , "help" }
+, { OPT_CLSOURCE    , OPTG_DETAILS , ACT_NONE      , ukoct::OPER_NONE            , false,  1, '\0', ""      , NULL, NULL, "--cl-source"       , "help" }
+, { OPT_CLBINARY    , OPTG_DETAILS , ACT_NONE      , ukoct::OPER_NONE            , false,  1, '\0', ""      , NULL, NULL, "--cl-binary"       , "help" }
+, { OPT_CLDEVID     , OPTG_DETAILS , ACT_NONE      , ukoct::OPER_NONE            , false,  1, '\0', ""      , "u4", NULL, "--cl-device-id"    , "help" }
+, { OPT_CLPLATID    , OPTG_DETAILS , ACT_NONE      , ukoct::OPER_NONE            , false,  1, '\0', ""      , "u4", NULL, "--cl-platform-id"  , "help" }
+, { OPT_CLPROGFLAGS , OPTG_DETAILS , ACT_NONE      , ukoct::OPER_NONE            , false,  1, '\0', ""      , NULL, NULL, "--cl-program-flags", "help" }
+, { OPT_CLPRINTSRC  , OPTG_DETAILS , ACT_CLPRINTSRC, ukoct::OPER_NONE            , false,  0, '\0', ""      , NULL, NULL, "--cl-print-src"    , "help" }
 
-// Unary Query operators
+// Unary Query operator
 , { OPT_OP_ISSAT    , OPTG_OP     , ACT_OPER      , ukoct::OPER_ISCONSISTENT    , false,  0, '\0', ""      , NULL, NULL, "+sat?"             , "help" }
-, { OPT_OP_ISISAT   , OPTG_OP     , ACT_OPER      , ukoct::OPER_ISINTCONSISTENT , false,  0, '\0', ""      , NULL, NULL, "+isat?"            , "help" }
-, { OPT_OP_ISCOH    , OPTG_OP     , ACT_OPER      , ukoct::OPER_ISCOHERENT      , false,  0, '\0', ""      , NULL, NULL, "+coh?"             , "help" }
-, { OPT_OP_ISCL     , OPTG_OP     , ACT_OPER      , ukoct::OPER_ISCLOSED        , false,  0, '\0', ""      , NULL, NULL, "+cl?"              , "help" }
-, { OPT_OP_ISSCL    , OPTG_OP     , ACT_OPER      , ukoct::OPER_ISSTRONGLYCLOSED, false,  0, '\0', ""      , NULL, NULL, "+scl?"             , "help" }
-, { OPT_OP_ISTCL    , OPTG_OP     , ACT_OPER      , ukoct::OPER_ISTIGHTLYCLOSED , false,  0, '\0', ""      , NULL, NULL, "+tcl?"             , "help" }
-, { OPT_OP_ISWCL    , OPTG_OP     , ACT_OPER      , ukoct::OPER_ISWEAKLYCLOSED  , false,  0, '\0', ""      , NULL, NULL, "+wcl?"             , "help" }
-, { OPT_OP_ISTOP    , OPTG_OP     , ACT_OPER      , ukoct::OPER_ISTOP           , false,  0, '\0', ""      , NULL, NULL, "+top?"             , "help" }
-, { OPT_OP_CL       , OPTG_OP     , ACT_OPER      , ukoct::OPER_CLOSURE         , false,  0, '\0', ""      , NULL, NULL, "+cl"               , "help" }
-, { OPT_OP_TCL      , OPTG_OP     , ACT_OPER      , ukoct::OPER_TIGHTCLOSURE    , false,  0, '\0', ""      , NULL, NULL, "+tcl"              , "help" }
+, { OPT_OP_ISISAT   , OPTG_OP     , ACT_OPER      , ukoct::OPER_ISINTCONSISTENT , false,  0, '\0', ""      , NULL, NULL, "-isat?"            , "help" }
+, { OPT_OP_ISCOH    , OPTG_OP     , ACT_OPER      , ukoct::OPER_ISCOHERENT      , false,  0, '\0', ""      , NULL, NULL, "-coh?"             , "help" }
+, { OPT_OP_ISCL     , OPTG_OP     , ACT_OPER      , ukoct::OPER_ISCLOSED        , false,  0, '\0', ""      , NULL, NULL, "-cl?"              , "help" }
+, { OPT_OP_ISSCL    , OPTG_OP     , ACT_OPER      , ukoct::OPER_ISSTRONGLYCLOSED, false,  0, '\0', ""      , NULL, NULL, "-scl?"             , "help" }
+, { OPT_OP_ISTCL    , OPTG_OP     , ACT_OPER      , ukoct::OPER_ISTIGHTLYCLOSED , false,  0, '\0', ""      , NULL, NULL, "-tcl?"             , "help" }
+, { OPT_OP_ISWCL    , OPTG_OP     , ACT_OPER      , ukoct::OPER_ISWEAKLYCLOSED  , false,  0, '\0', ""      , NULL, NULL, "-wcl?"             , "help" }
+, { OPT_OP_ISTOP    , OPTG_OP     , ACT_OPER      , ukoct::OPER_ISTOP           , false,  0, '\0', ""      , NULL, NULL, "-top?"             , "help" }
+, { OPT_OP_CL       , OPTG_OP     , ACT_OPER      , ukoct::OPER_CLOSURE         , false,  0, '\0', ""      , NULL, NULL, "-cl"               , "help" }
+, { OPT_OP_TCL      , OPTG_OP     , ACT_OPER      , ukoct::OPER_TIGHTCLOSURE    , false,  0, '\0', ""      , NULL, NULL, "-tcl"              , "help" }
 
 // Unary operators
-, { OPT_OP_ECHO     , OPTG_OP     , ACT_OPER      , ukoct::OPER_NONE            , false,  0, '\0', ""      , NULL, NULL, "+echo"             , "help" }
-, { OPT_OP_SP       , OPTG_OP     , ACT_OPER      , ukoct::OPER_SHORTESTPATH    , false,  0, '\0', ""      , NULL, NULL, "+sp"               , "help" }
-, { OPT_OP_STR      , OPTG_OP     , ACT_OPER      , ukoct::OPER_STRENGTHEN      , false,  0, '\0', ""      , NULL, NULL, "+str"              , "help" }
-, { OPT_OP_TIGHT    , OPTG_OP     , ACT_OPER      , ukoct::OPER_TIGHTEN         , false,  0, '\0', ""      , NULL, NULL, "+tight"            , "help" }
-, { OPT_OP_TOP      , OPTG_OP     , ACT_OPER      , ukoct::OPER_TOP             , false,  0, '\0', ""      , NULL, NULL, "+top"              , "help" }
+, { OPT_OP_ECHO     , OPTG_OP     , ACT_OPER      , ukoct::OPER_NONE            , false,  0, '\0', ""      , NULL, NULL, "-echo"             , "help" }
+, { OPT_OP_SP       , OPTG_OP     , ACT_OPER      , ukoct::OPER_SHORTESTPATH    , false,  0, '\0', ""      , NULL, NULL, "-sp"               , "help" }
+, { OPT_OP_STR      , OPTG_OP     , ACT_OPER      , ukoct::OPER_STRENGTHEN      , false,  0, '\0', ""      , NULL, NULL, "-str"              , "help" }
+, { OPT_OP_TIGHT    , OPTG_OP     , ACT_OPER      , ukoct::OPER_TIGHTEN         , false,  0, '\0', ""      , NULL, NULL, "-tight"            , "help" }
+, { OPT_OP_TOP      , OPTG_OP     , ACT_OPER      , ukoct::OPER_TOP             , false,  0, '\0', ""      , NULL, NULL, "-top"              , "help" }
 
 // Binary operators
-, { OPT_OP_PUSHD    , OPTG_OP     , ACT_OPER      , ukoct::OPER_PUSHDIFFCONS    , false,  1, '\0', ""      , NULL, NULL, "+pushd"            , "help" }
-, { OPT_OP_PUSHC    , OPTG_OP     , ACT_OPER      , ukoct::OPER_PUSHOCTCONS     , false,  1, '\0', ""      , NULL, NULL, "+pushc"            , "help" }
-, { OPT_OP_POP      , OPTG_OP     , ACT_OPER      , ukoct::OPER_FORGETOCTVAR    , false,  1, '\0', ""      , NULL, NULL, "+pop"              , "help" }
+, { OPT_OP_PUSHD    , OPTG_OP     , ACT_OPER      , ukoct::OPER_PUSHDIFFCONS    , false,  1, '\0', ""      , NULL, NULL, "-pushd"            , "help" }
+, { OPT_OP_PUSHC    , OPTG_OP     , ACT_OPER      , ukoct::OPER_PUSHOCTCONS     , false,  1, '\0', ""      , NULL, NULL, "-pushc"            , "help" }
+, { OPT_OP_POP      , OPTG_OP     , ACT_OPER      , ukoct::OPER_FORGETOCTVAR    , false,  1, '\0', ""      , NULL, NULL, "-pop"              , "help" }
 
 // Binary inter-matrix Operators
-, { OPT_OP_EQ       , OPTG_OP     , ACT_OPER      , ukoct::OPER_NONE            , false,  1, '\0', ""      , NULL, NULL, "+eq"               , "help" }
-, { OPT_OP_NEQ      , OPTG_OP     , ACT_OPER      , ukoct::OPER_EQUALS          , false,  1, '\0', ""      , NULL, NULL, "+neq"              , "help" }
-, { OPT_OP_INC      , OPTG_OP     , ACT_OPER      , ukoct::OPER_INCLUDES        , false,  1, '\0', ""      , NULL, NULL, "+inc"              , "help" }
-, { OPT_OP_AND      , OPTG_OP     , ACT_OPER      , ukoct::OPER_UNION           , false,  1, '\0', ""      , NULL, NULL, "+and"              , "help" }
-, { OPT_OP_OR       , OPTG_OP     , ACT_OPER      , ukoct::OPER_INTERSECTION    , false,  1, '\0', ""      , NULL, NULL, "+or"               , "help" }
+, { OPT_OP_EQ       , OPTG_OP     , ACT_OPER      , ukoct::OPER_NONE            , false,  1, '\0', ""      , NULL, NULL, "-eq"               , "help" }
+, { OPT_OP_NEQ      , OPTG_OP     , ACT_OPER      , ukoct::OPER_EQUALS          , false,  1, '\0', ""      , NULL, NULL, "-neq"              , "help" }
+, { OPT_OP_INC      , OPTG_OP     , ACT_OPER      , ukoct::OPER_INCLUDES        , false,  1, '\0', ""      , NULL, NULL, "-inc"              , "help" }
+, { OPT_OP_AND      , OPTG_OP     , ACT_OPER      , ukoct::OPER_UNION           , false,  1, '\0', ""      , NULL, NULL, "-and"              , "help" }
+, { OPT_OP_OR       , OPTG_OP     , ACT_OPER      , ukoct::OPER_INTERSECTION    , false,  1, '\0', ""      , NULL, NULL, "-or"               , "help" }
 };
 
 
@@ -108,7 +108,7 @@ const OperDetailValue operDetailValues[operDetailValues_sz] = {
 };
 
 
-const FOperationCallback operationCallbacks[ukoct::IMPL_MAX_ + 1][ukoct::ELEM_MAX_ + 1] = {
+const IOperationCallback* operationCallbacks[ukoct::IMPL_MAX_ + 1][ukoct::ELEM_MAX_ + 1] = {
 	//                  NONE, HALF, FLOAT         , DOUBLE     , LDOUBLE
 	/* IMPL_NONE   */ { NULL, NULL, NULL          , NULL       , NULL },
 	/* IMPL_CPU    */ { NULL, NULL, ocb_cpu_flt   , ocb_cpu_dbl, ocb_cpu_ldbl },

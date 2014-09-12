@@ -30,6 +30,8 @@
 
 #ifdef ukoct_DEBUG
 #	define ukoct_ASSERT(b, m) ukoct::assert(b, m)
+#else
+#	define ukoct_ASSERT(b, m)
 #endif
 
 namespace ukoct {
