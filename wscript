@@ -54,8 +54,9 @@ BUILDS = {
 			'source': [
 				src + '/main.cpp',
 				src + '/main_data.cpp',
-				src + '/main_cpu.cpp',
-				src + '/main_opencl.cpp',
+				src + '/main_general.cpp',
+				src + '/main_details.cpp',
+				src + '/main_oper.cpp',
 			],
 		},
 

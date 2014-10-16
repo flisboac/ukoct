@@ -1,6 +1,7 @@
 #ifndef MAIN_HPP_
 #define MAIN_HPP_
 
+
 #include <cstddef>
 #include <sstream>
 #include <ctime>
@@ -66,24 +67,21 @@
 //
 
 
-enum EStage {
-	STAGE_PREPARE, // Initial stages of object construction.
-	STAGE_PARSE,   // Command-line parsing and gathering of basic (general) options.
-	STAGE_INIT,    // Instantiation of implementation states, matrices and operators.
-	STAGE_RUN,     // Operations' execution.
-	STAGE_FINISH   // Destruction of used objects (implementation states and all the like)
+enum EHelpContents {
+	HELP_VERSION,
+	HELP_USAGE,
+	HELP_SECTION,
+	HELP_EXAMPLES,
+	HELP_FOOTER
 };
 
 
-enum EAction {
-	ACT_NONE
-	, ACT_HELP
-	, ACT_VERSION
-	, ACT_CLPRINTSRC
-	, ACT_OPER
-
-	, ACT_MIN_ = ACT_HELP
-	, ACT_MAX_ = ACT_OPER
+enum EStage {
+	STAGE_PREPARE, // Initial stages of object construction, registering of options on the option parser, etc
+	STAGE_PARSE,   // Command-line parsing and validation
+	STAGE_INIT,    // Instantiation of implementation states, matrices and operators.
+	STAGE_EXEC,    // Operations' execution.
+	STAGE_FINISH   // Destruction of used objects (implementation states and all the like)
 };
 
 
@@ -91,92 +89,43 @@ enum EOptionGroup {
 	OPTG_NONE
 	, OPTG_GENERAL
 	, OPTG_DETAILS
-	, OPTG_OP
+	, OPTG_OPER
 
 	, OPTG_MIN_ = OPTG_GENERAL
-	, OPTG_MAX_ = OPTG_OP
-	, OPTG_LAST = OPTG_OP
+	, OPTG_MAX_ = OPTG_OPER
+	, OPTG_LAST = OPTG_OPER
 };
 
 
-enum EOption {
-	OPT_NONE
-	, OPT_INPUT = OPT_NONE
-
-  	// General Options
-    , OPT_HELP        // -h, --help Prints the help contents
-	, OPT_VERSION     // --version Prints version information
-	, OPT_SILENT      // -V      Activates silent mode
-	, OPT_VERBOSE     // -v      Activates verbose mode
-    , OPT_TIMELIMIT   // -t=NUM  Specifies the time limit, in seconds
-    , OPT_OUTPUT      // -o=FILE Specifies the output
-    , OPT_ELEMTYPE    // -e=TYPE Specify the element type to be used (float, double, half, etc)
-    , OPT_EXECTYPE    // -x=SOLV Specify the solver to be used (CPU, OpenCL, etc)
-    , OPT_OPERVARIANT // --variant=NAME Forces the solver to use a specific operator variant.
-
-    // OpenCL options
-    , OPT_CLSOURCE    // --cl-source=FILE Specify an input OpenCL source file for the specified type
-    , OPT_CLBINARY    // --cl-binary=FILE Specify an input OpenCL binary file for the specified type
-    , OPT_CLDEVID     // --cl-device-id=ID
-    , OPT_CLPLATID    // --cl-platform-id=ID
-    , OPT_CLPROGFLAGS // --cl-program-flags=FLAGS
-    , OPT_CLPRINTSRC  // --cl-print-source=FILE
-
-    // Unary Query operators
-    , OPT_OP_ISSAT   // -sat?  consistent
-    , OPT_OP_ISISAT  // -isat? intConsistent
-    , OPT_OP_ISCOH   // -coh?  coherent
-    , OPT_OP_ISCL    // -cl?   isClosed
-    , OPT_OP_ISSCL   // -scl?  isStronglyClosed
-    , OPT_OP_ISTCL   // -tcl?  isTightlyClosed
-    , OPT_OP_ISWCL   // -wcl?  isWeaklyClosed
-    , OPT_OP_ISTOP   // -top?  isTop
-    , OPT_OP_CL    // -cl    closure
-    , OPT_OP_TCL   // -tcl   tightClosure
-
-    // Unary operators
-    , OPT_OP_ECHO  // -echo  echo
-    , OPT_OP_SP    // -sp    shortestPath
-    , OPT_OP_STR   // -str   strengthen
-    , OPT_OP_TIGHT // -tight tighen
-    , OPT_OP_TOP   // -top   top
-
-    // Binary operators
-    , OPT_OP_PUSHD // -pushd push diff constraint
-    , OPT_OP_PUSHC // -pushc push oct constraint
-    , OPT_OP_POP   // -pop   Forget variable
-
-    // Binary inter-matrix Operators
-    , OPT_OP_EQ  // -eq   equal
-    , OPT_OP_NEQ // -neq  notequal
-    , OPT_OP_INC // -inc  includes
-    , OPT_OP_AND // -and  union
-    , OPT_OP_OR   // -or   intersection
-
-    , OPT_MIN_ = OPT_HELP
-    , OPT_MAX_ = OPT_OP_OR
+enum EVerboseLevel {
+	VERB_SILENT = -1,
+	VERB_NORMAL,
+	VERB_VERBOSE,
+	VERB_DEBUG
 };
 
 
+//
+// TYPEDEFS
+//
+
+
+struct IOptionGroupCallback;
 struct ArgState;
 struct Operand;
 struct InputStream;
 struct OutputStream;
-struct Timing;
 
-struct OptionGroup;
 struct Option;
 struct TypeName;
-struct OperDetailValue;
+struct VariantDefinition;
 
-struct IOptionCallback;
-struct IOperationCallback;
+struct NullStream;
 
 
-struct IOptionCallback {
-	virtual ~IOptionCallback() {}
-	virtual bool operator()(ArgState& A, Operand& operand) const = 0;
-};
+//
+// STRUCTS
+//
 
 
 struct NullStream : public std::stringstream {
@@ -184,24 +133,23 @@ struct NullStream : public std::stringstream {
 };
 
 
-struct OptionGroup {
-	EOptionGroup id;
-	const char* name;
-	const char* help;
+struct IOptionGroupCallback {
+	virtual ~IOptionGroupCallback() {}
+	virtual EOptionGroup groupId() const = 0;
+	virtual bool operator()(ArgState& A, Operand* operand = NULL) const = 0;
+	virtual void help(std::ostream& os, EHelpContents which) const = 0;
 };
 
 
 struct Option {
-	EOption id;
+	int id;
 	EOptionGroup group;
-	EAction action;
-
 	ukoct::EOperation operation;
 	bool required;
 	int nargs;
 	char argsep;
 	const char* defaultVal;
-	const char* type; // Validator
+	const char* type;
 	const char* shortFlag;
 	const char* longFlag;
 	const char* help;
@@ -214,103 +162,12 @@ struct TypeName {
 };
 
 
-struct OperDetailValue {
+struct VariantDefinition {
 	const char* name;
 	ukoct::OperationDetails group;
 	ukoct::OperationDetails details;
 	const char* help;
 };
-
-const size_t operDetailValues_sz = 10;
-extern const OptionGroup optionGroups[OPTG_MAX_ + 1];
-extern const Option options[OPT_MAX_ + 1];
-extern const TypeName operNames[ukoct::OPER_MAX_ + 1];
-extern const OperDetailValue operDetailValues[operDetailValues_sz];
-extern const TypeName elemNames[ukoct::ELEM_MAX_ + 1];
-extern const TypeName implNames[ukoct::IMPL_MAX_ + 1];
-
-
-//
-// PARSER STATE
-//
-
-
-enum EVerboseLevel {
-	VERB_SILENT = -1,
-	VERB_NORMAL,
-	VERB_VERBOSE,
-	VERB_DEBUG
-};
-
-
-struct Timing {
-	clock_t clockStart;
-	clock_t clockEnd;
-	Timing() : clockStart(0), clockEnd(0) {}
-	Timing(const Timing& other) = default;
-	inline void start() { clockStart = clock(); }
-	inline void end() {
-		ukoct_ASSERT(isStarted(), "end() can only be called after start().");
-		clockEnd = clock();
-	}
-	inline bool isStarted() const { return clockStart != 0; }
-	inline bool isFinished() const { return clockEnd != 0; }
-	inline clock_t diff() const {
-		ukoct_ASSERT(isFinished(), "diff() can only be called after end().");
-		return clockEnd - clockStart;
-	}
-	inline clock_t rem() const {
-		return diff() % CLOCKS_PER_SEC;
-	}
-	inline void print(std::ostream& os, int precision = 5) const {
-		double tsec = sec();
-		const char* suffix = "s";
-		double t = sec();
-
-		if (t < 1) {
-			t *= 1000;
-			suffix = "ms";
-
-			if (t < 1) {
-				t *= 1000;
-				suffix = "us";
-			}
-
-		} else if (t >= 1000) {
-			t /= 60;
-			suffix = "m";
-
-			if (t >= 1000) {
-				t /= 24;
-				suffix = "h";
-			}
-		}
-
-		os << std::fixed << std::setw(0) << std::setprecision(precision) << t << suffix;
-	}
-	inline double sec() const {
-		ukoct_ASSERT(isStarted(), "end() can only be called after start().");
-		return static_cast<double>(diff()) / static_cast<double>(CLOCKS_PER_SEC);
-	}
-	inline double msec() const {
-		return sec() * 1000;
-	}
-	inline double usec() const {
-		return sec() * 1000 * 1000;
-	}
-	inline double min() const {
-		return sec() / 60;
-	}
-	inline double hour() const {
-		return sec() / 24;
-	}
-};
-
-
-inline std::ostream& operator<<(std::ostream& os, const Timing& timing) {
-	timing.print(os);
-	return os;
-}
 
 
 struct InputStream {
@@ -332,10 +189,13 @@ struct InputStream {
 		{}
 	InputStream(const InputStream& rhs) = default;
 	~InputStream() {
-		if (fileStream != NULL) delete fileStream;
-		if (stringStream != NULL) delete stringStream;
+		close();
+		delete fileStream;
+		delete stringStream;
 	}
+	operator std::istream&() { return *stream; }
 	inline bool isParsed() { return stream != NULL; }
+	inline void close() { if (fileStream != NULL && fileStream->is_open()) fileStream->close(); }
 };
 
 
@@ -355,24 +215,29 @@ struct OutputStream {
 		{}
 	OutputStream(const OutputStream& rhs) = default;
 	~OutputStream() {
-		if (fileStream != NULL) delete fileStream;
+		close();
+		delete fileStream;
 	}
+	operator std::ostream&() { return *stream; }
 	inline bool isParsed() { return stream != NULL; }
+	inline void close() { if (fileStream != NULL && fileStream->is_open()) fileStream->close(); }
 };
 
 
 struct Operand {
 	// General options
-	// OPT_NONE denotes a positional argument
+	const Option* option;
 	int optionId;
+	int groupId;
+	unsigned int actionIdx;
 	ez::OptionGroup* ezGroup;
 	std::vector<std::string> args;
 	int parseIndex;
 	EStage stage;
 
 	// Performance info
-	Timing initTiming;
-	Timing execTiming;
+	ukoct::CpuTiming initTiming;
+	ukoct::CpuTiming execTiming;
 
 	// For operators
 	InputStream inputStream;
@@ -383,7 +248,10 @@ struct Operand {
 	void* state;
 
 	Operand()
-		: optionId(0)
+		: option(NULL)
+		, optionId(0)
+		, groupId(0)
+		, actionIdx(0)
 		, ezGroup(NULL)
 		, args()
 		, parseIndex(-1)
@@ -398,7 +266,10 @@ struct Operand {
 		, state(NULL)
 		{}
 	Operand(const Operand& other)
-		: optionId(other.optionId)
+		: option(other.option)
+		, optionId(other.optionId)
+		, groupId(other.groupId)
+		, actionIdx(other.actionIdx)
 		, ezGroup(other.ezGroup)
 		, args(other.args)
 		, parseIndex(other.parseIndex)
@@ -413,7 +284,10 @@ struct Operand {
 		, state(other.state)
 		{}
 	Operand(const char* inpf, const char* outf)
-		: optionId(0)
+		: option(NULL)
+		, optionId(0)
+		, groupId(0)
+		, actionIdx(0)
 		, ezGroup(NULL)
 		, args()
 		, parseIndex(-1)
@@ -431,25 +305,18 @@ struct Operand {
 		return compare(other) < 0;
 	}
 	inline int compare(const Operand& other) {
-		int ret = (options[optionId].group > options[other.optionId].group) - (options[optionId].group < options[other.optionId].group);
-		ret = ret != 0 ? ret : (options[optionId].action > options[other.optionId].action) - (options[optionId].action < options[other.optionId].action);
+		int ret = 0;
+		int thisOptionId = option != NULL ? option->id : optionId;
+		int otherOptionId = other.option != NULL ? other.option->id : other.optionId;
+		int thisGroupId = option != NULL ? option->group : groupId;
+		int otherGroupId = other.option != NULL ? other.option->group : other.groupId;
+		ret = (thisGroupId > otherGroupId) - (thisGroupId < otherGroupId);
+		ret = ret != 0 ? ret : (thisOptionId > otherOptionId) - (thisOptionId < otherOptionId);
 		return ret != 0 ? ret : (ezGroup->parseIndex > other.ezGroup->parseIndex) - (ezGroup->parseIndex < other.ezGroup->parseIndex);
 	}
-	inline ez::OptionGroup& argGroup() const { return *ezGroup; }
-	inline const Option& option() const { return options[optionId]; }
 };
 
-
-struct OperDetails {
-	std::string name;
-	ukoct::OperationDetails details;
-	void* oper;
-	OperDetails() : oper(NULL) {}
-	OperDetails(const OperDetails& rhs) = default;
-};
-
-
-static NullStream nullstream;
+extern NullStream nullstream;
 
 struct ArgState {
 	ez::ezOptionParser parser;
@@ -460,17 +327,20 @@ struct ArgState {
 	std::ostream* sout;
 	EVerboseLevel verbose;
 	int maxTime;
+	size_t totalActions;
 	Operand inputOperand;
 	Operand outputOperand;
 	ukoct::EImplementation implType;
 	ukoct::EElemType elemType;
-	std::map<ukoct::EOperation, OperDetails> variants;
+	std::map<ukoct::EOperation, ukoct::OperationDetails> variants;
+	std::map<std::string, const Option*> options;
 	std::vector<Operand> operands;
 	ArgState()
 		: exitCode(0)
 		, stage(STAGE_PREPARE)
 		, verbose(VERB_DEBUG)
 		, maxTime(0)
+		, totalActions(0)
 		, inputOperand("-", "")
 		, outputOperand("", "-")
 		, implType(ukoct::IMPL_OPENCL)
@@ -486,85 +356,48 @@ struct ArgState {
 	inline std::ostream& warn(bool withHeader = true) { return verbose >= VERB_NORMAL ? (slog != NULL ? *slog << (withHeader ? "! [WARN] " : "") : nullstream) : nullstream; }
 	inline std::ostream& err(bool withHeader = true)  { return verbose >= VERB_NORMAL ? (serr != NULL ? *serr << (withHeader ? "* [ ERR] " : "") : nullstream) : nullstream; }
 	bool initialize();
-	bool parseArgs(int argc, const char** argv);
-	bool parseOperands();
-	void executeOperands();
-
-private:
+	void run(int argc, const char** argv);
+	void finalize() throw();
+	bool registerOption(const Option& option);
+	void printHelp(std::ostream& os);
+	void printVersion(std::ostream& os);
+	bool parseOperand(Operand& operand);
 	bool parseInputOperand(Operand& operand);
 	bool parseOutputOperand(Operand& operand);
+
+private:
 	bool parseInputStream(Operand& operand);
 	bool parseOutputStream(Operand& operand);
-	void printHelp();
-	void printVersion();
 };
 
 
-struct IOperationCallback {
-	virtual ~IOperationCallback() {}
-	virtual bool operator()(ArgState& A, Operand& operand) const = 0;
-	virtual void source(std::string& str) const { }
-};
+//
+// VARIABLES AND VALUES
+//
 
 
-extern const IOperationCallback* operationCallbacks[ukoct::IMPL_MAX_ + 1][ukoct::ELEM_MAX_ + 1];
+extern const TypeName operNames[ukoct::OPER_MAX_ + 1];
+extern const TypeName elemNames[ukoct::ELEM_MAX_ + 1];
+extern const TypeName implNames[ukoct::IMPL_MAX_ + 1];
 
-extern const IOperationCallback* const ocb_cpu_flt;
-extern const IOperationCallback* const ocb_cpu_dbl;
-extern const IOperationCallback* const ocb_cpu_ldbl;
-extern const IOperationCallback* const ocb_opencl_flt;
+const size_t variantDefinitions_sz = 10;
+extern const VariantDefinition variantDefinitions[variantDefinitions_sz];
+
+extern const IOptionGroupCallback* optionGroupCallbacks[OPTG_MAX_ + 1];
 
 
+//
+// FUNCTIONS
+//
 
-template <typename T> plas::Problem<T, plas::DenseMatrix>* loadProblem(ArgState& A, Operand& O) {
-	plas::Problem<T, plas::DenseMatrix>* problem = new plas::Problem<T, plas::DenseMatrix>();
-	bool ret = plas::open(*O.inputStream.stream, *problem, &A.log(false));
 
-	if (ret) {
-		if (problem->problemType() == plas::PROBLEM_OCT) {
-			plas::Problem<T, plas::DenseMatrix>* other = new plas::Problem<T, plas::DenseMatrix>();
-			ret = plas::toOctDiffProblem(*problem, *other, &A.log(false));
-			delete problem;
-			problem = other;
-			ret = false;
-
-		} else if (problem->problemType() != plas::PROBLEM_OCTDIFF) {
-			A.err() << "Invalid problem type on input '" << O.inputStream.fileName << "'." << std::endl;
-			delete problem;
-			problem = NULL;
-			ret = false;
-		}
-	}
-
-	if (ret) {
-		if (O.optionId == OPT_OP_PUSHC) {
-			A.err() << "pushc not yet implemented, sorry!" << std::endl;
-			A.exitCode = RETNOTIMPL;
-
-		} else if (O.optionId == OPT_OP_PUSHD) {
-			A.err() << "pushd not yet implemented, sorry!" << std::endl;
-			A.exitCode = RETNOTIMPL;
-		}
-	}
-
-	return problem;
+template <typename T> const T* findByName(const char* str, const T* list, size_t size) {
+	const T* ret = NULL;
+	for (size_t i = 0; i < size && ret == NULL; ++i, ++list)
+		if (list->name != NULL && strcmp(str, list->name))
+			ret = list;
+	return ret;
 }
-
-
-template <typename T> void finalizeProblem(ArgState& A, Operand& O) {
-	if (O.octCons != NULL) {
-		plas::OctConstraint<T>* c = reinterpret_cast<plas::OctConstraint<T>*>(O.octCons);
-		delete c;
-		O.octCons = NULL;
-	}
-
-	if (O.diffCons != NULL) {
-		plas::OctDiffConstraint<T>* c = reinterpret_cast<plas::OctDiffConstraint<T>*>(O.diffCons);
-		delete c;
-		O.diffCons = NULL;
-	}
-}
-
 
 
 #endif /* MAIN_HPP_ */

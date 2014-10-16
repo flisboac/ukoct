@@ -257,6 +257,21 @@ enum ETimingResolution {
 };
 
 
+class Timing;
+class CpuTiming;
+
+
+static inline void assert(bool expr, const char* msg, int code = ERROR) { if (!expr) throw Error(code, msg); }
+
+
+template <typename T> static inline void assertStateOptions(bool initialized, size_t diffSize, T* rawInput, bool rowMajor) {
+	assert(!initialized, "State cannot be initialized more than once.");
+	assert(diffSize > 1, "diffSize must be at least 2.");
+	assert(diffSize % 2 == 0, "diffSize must be a multiple of 2.");
+	assert(rawInput != NULL, "Input not given.");
+}
+
+
 class Timing {
 public:
 	Timing() :
@@ -505,9 +520,6 @@ struct CpuTiming : public Timing {
 };
 
 
-static inline void assert(bool expr, const char* msg, int code = ERROR) { if (!expr) throw Error(code, msg); }
-
-
 inline void printTiming(double time, ETimingResolution resl, std::ostream& os, int precision = 3) {
 	std::streamsize oldprec = os.precision();
 	std::streamsize oldw = os.width();
@@ -520,14 +532,6 @@ inline void printTiming(double time, ETimingResolution resl, std::ostream& os, i
 
 inline void printTiming(const Timing& timing, std::ostream& os, int precision = 3) {
 	printTiming(timing.time(), timing.resolution(), os, precision);
-}
-
-
-template <typename T> static inline void assertStateOptions(bool initialized, size_t diffSize, T* rawInput, bool rowMajor) {
-	assert(!initialized, "State cannot be initialized more than once.");
-	assert(diffSize > 1, "diffSize must be at least 2.");
-	assert(diffSize % 2 == 0, "diffSize must be a multiple of 2.");
-	assert(rawInput != NULL, "Input not given.");
 }
 
 

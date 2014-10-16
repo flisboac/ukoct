@@ -140,9 +140,9 @@ public:
 namespace impl {
 namespace cpu {
 
-extern const CpuImplementation<float> floatImpl;
-extern const CpuImplementation<double> doubleImpl;
-extern const CpuImplementation<long double> ldoubleImpl;
+//extern const CpuImplementation<float> floatImpl;
+//extern const CpuImplementation<double> doubleImpl;
+//extern const CpuImplementation<long double> ldoubleImpl;
 
 }
 }
@@ -160,9 +160,9 @@ template <typename T> struct ImplementationInfo<T, IMPL_CPU> {
 	static IImplementation<T>* newImplementation() { return new CpuImplementation<T>(); }
 	static const IImplementation<T>* implementation() {
 		switch(elemType) {
-		case ELEM_FLOAT  : return impl::cpu::floatImpl  ; break;
-		case ELEM_DOUBLE : return impl::cpu::doubleImpl ; break;
-		case ELEM_LDOUBLE: return impl::cpu::ldoubleImpl; break;
+		//case ELEM_FLOAT  : return impl::cpu::floatImpl  ; break;
+		//case ELEM_DOUBLE : return impl::cpu::doubleImpl ; break;
+		//case ELEM_LDOUBLE: return impl::cpu::ldoubleImpl; break;
 		}
 		return NULL;
 	}
@@ -175,9 +175,9 @@ namespace ukoct {
 namespace impl {
 namespace cpu {
 
-const ukoct::CpuImplementation<float> floatImpl;
-const ukoct::CpuImplementation<double> doubleImpl;
-const ukoct::CpuImplementation<long double> ldoubleImpl;
+//const ukoct::CpuImplementation<float> floatImpl;
+//const ukoct::CpuImplementation<double> doubleImpl;
+//const ukoct::CpuImplementation<long double> ldoubleImpl;
 
 }
 }
