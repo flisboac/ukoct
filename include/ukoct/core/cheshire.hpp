@@ -7,132 +7,279 @@
 
 namespace ukoct {
 
-// TODO ukoct/core/cheshire.hpp
-#if 0
 template <typename T> class State;
 template <typename T> class Operator;
-template <typename T> class OperatorEnv;
-template <typename T> class OperatorResult;
+template <typename T> class Implementation;
 
+template <typename T, template <typename IT> class I> class Cheshire {
 
-template <typename T> class State : public IState<T> {
-public:
-	State() : _self(NULL) {}
-	explicit State(const State<T>& rhs) : _self(rhs._self != NULL ? rhs._self->clone() : NULL) {}
-	explicit State(const IState<T>& rhs) : _self(rhs.clone()) {}
-	explicit State(IState<T>* self) : _self(self) {}
-	explicit State(const IImplementation<T>& impl) : _self(impl.newState()) {}
-	~State() { if (_self != NULL) delete _self; }
-	inline const IImplementation<T>& implementation() const
-		{ assert(_self != NULL, "Missing internal pointer."); return _self->implementation(); }
-	inline IState<T>* clone(const IState<T>* other = NULL) const
-		{ assert(_self != NULL, "Missing internal pointer."); return _self->clone(other); }
-	inline bool isValid() const
-		{ assert(_self != NULL, "Missing internal pointer."); return _self->isValid(); }
-	inline size_t diffSize() const
-		{ assert(_self != NULL, "Missing internal pointer."); return _self->diffSize(); }
-	inline size_t octSize() const
-		{ assert(_self != NULL, "Missing internal pointer."); return _self->octSize(); }
-	inline bool rowMajor() const
-		{ assert(_self != NULL, "Missing internal pointer."); return _self->rowMajor(); }
-	inline T* rawInput() const
-		{ assert(_self != NULL, "Missing internal pointer."); return _self->rawInput(); }
-	inline void copyTo(T* ptr) const
-		{ assert(_self != NULL, "Missing internal pointer."); _self->copyTo(ptr); }
-	inline void setup(size_t diffSize, T* rawInput, bool rowMajor, void* implOptions = NULL)
-		{ assert(_self != NULL, "Missing internal pointer."); _self->setup(diffSize, rawInput, rowMajor, implOptions); }
-
-private:
-	IState<T>* _self;
-};
-
-
-template <typename T> class OperatorArgs : public IOperatorArgs<T> {
-public:
-	OperatorArgs() : _self(NULL) {}
-	explicit OperatorArgs(const OperatorArgs<T>& rhs) : _self(rhs._self != NULL ? rhs._self->clone() : NULL) {}
-	explicit OperatorArgs(const IOperatorArgs<T>& rhs) : _self(rhs.clone()) {}
-	explicit OperatorArgs(IOperatorArgs<T>* self) : _self(self) {}
-	explicit OperatorArgs(const IState<T>& state) : _self(state.implementation().newOperatorArgs()) {}
-	explicit OperatorArgs(const IOperator<T>& oper) : _self(oper.implementation().newOperatorArgs()) {}
-	explicit OperatorArgs(const IImplementation<T>& impl) : _self(impl.newState()) {}
-	~OperatorArgs() { if (_self != NULL) delete _self; }
-	inline const IImplementation<T>& implementation() const
-		{ assert(_self != NULL, "Missing internal pointer."); return _self->implementation(); }
-	inline IOperatorArgs<T>* clone(const IOperatorArgs<T>* base = NULL) const
-		{ assert(_self != NULL, "Missing internal pointer."); return _self->clone(base); }
-	inline IState<T>& state() const
-		{ assert(_self != NULL, "Missing internal pointer."); return _self->state(); }
-	inline IState<T>* other() const
-		{ assert(_self != NULL, "Missing internal pointer."); return _self->other(); }
-	inline IOperatorArgs<T>* other(IState* v)
-		{ assert(_self != NULL, "Missing internal pointer."); return _self->other(v); }
-	inline bool intBased() const
-		{ assert(_self != NULL, "Missing internal pointer."); return _self->intBased(); }
-	inline IOperatorArgs<T>* intBased(bool v)
-		{ assert(_self != NULL, "Missing internal pointer."); return _self->intBased(v); }
-	inline bool waiting() const
-		{ assert(_self != NULL, "Missing internal pointer."); return _self->waiting(); }
-	inline IOperatorArgs<T>* waiting(bool v)
-		{ assert(_self != NULL, "Missing internal pointer."); return _self->waiting(v); }
-	inline size_t iterations() const
-		{ assert(_self != NULL, "Missing internal pointer."); return _self->iterations(); }
-	inline IOperatorArgs<T>* waiting(size_t v)
-		{ assert(_self != NULL, "Missing internal pointer."); return _self->iterations(v); }
-	inline plas::var_t var() const
-		{ assert(_self != NULL, "Missing internal pointer."); return _self->var(); }
-	inline IOperatorArgs<T>* var(plas::var_t v)
-		{ assert(_self != NULL, "Missing internal pointer."); return _self->var(v); }
-	inline plas::OctDiffConstraint<T> diffCons() const
-		{ assert(_self != NULL, "Missing internal pointer."); return _self->diffCons(); }
-	inline IOperatorArgs<T>* diffCons(plas::OctDiffConstraint<T> v)
-		{ assert(_self != NULL, "Missing internal pointer."); return _self->diffCons(v); }
-	inline plas::OctConstraint<T> octCons() const
-		{ assert(_self != NULL, "Missing internal pointer."); return _self->octCons(); }
-	inline IOperatorArgs<T>* octCons(plas::OctConstraint<T> v)
-		{ assert(_self != NULL, "Missing internal pointer."); return _self->octCons(v); }
-
-private:
-	IOperatorArgs<T>* _self;
-};
-
-
-template <typename T> class Operator : public IOperator<T> {
-public:
-	Operator() : _self(NULL) {}
-	explicit Operator(const Operator<T>& rhs) : _self(rhs._self != NULL ? rhs._self->clone() : NULL) {}
-	explicit Operator(const IOperator<T>& rhs) : _self(rhs.clone()) {}
-	explicit Operator(IOperator<T>* self) : _self(self) {}
-	explicit Operator(const IState<T>& state, EOperation oper, OperationDetails details = 0, bool matchAnyDetails = false) : _self(NULL) { setup(state.implementation().getOperatorEnv(), oper, details, matchAnyDetails); }
-	explicit Operator(const IImplementation<T>& impl, EOperation oper, OperationDetails details = 0, bool matchAnyDetails = false) : _self(NULL) { setup(impl.getOperatorEnv(), oper, details, matchAnyDetails); }
-	explicit Operator(const IOperatorEnv<T>& env, EOperation oper, OperationDetails details = 0, bool matchAnyDetails = false) : _self(NULL) { setup(env, oper, details, matchAnyDetails); }
-	~Operator() { if (_self != NULL) delete _self; }
-	inline const IImplementation<T>& implementation() const
-		{ assert(_self != NULL, "Missing internal pointer."); return _self->implementation(); }
-	inline IOperator<T>* instantiate() const
-		{ assert(_self != NULL, "Missing internal pointer."); return _self->instantiate(); }
-	inline ukoct::EOperation operation() const
-		{ assert(_self != NULL, "Missing internal pointer."); return _self->operation(); }
-	inline ukoct::OperationDetails details() const
-		{ assert(_self != NULL, "Missing internal pointer."); return _self->details(); }
-	inline void run(const IOperatorArgs<T>& args)
-		{ assert(_self != NULL, "Missing internal pointer."); _self->run(args); }
-	inline IOperatorResult<T>& result()
-		{ assert(_self != NULL, "Missing internal pointer."); return _self->result(); }
-
-private:
-	void setup(const IOperatorEnv<T>& env, EOperation oper, OperationDetails details = 0, bool matchAnyDetails = false) {
-		std::vector<IOperator<T>*> found;
-		env.filter(found, 1, oper, details, matchAnyDetails);
-		assert(!found.empty(), "Operator is not present for the implementation.");
-		_self = found[0];
+	const IState<T>* self() const {
+		return _self;
 	}
 
-private:
-	IOperator<T>* _self;
+
+	IState<T>* self() {
+		return _self;
+	}
+
+
+	IState<T>* self(IState<T>* state) {
+		_self = state;
+		return _self;
+	}
+
+
+	void release() {
+		delete _self;
+		_self = NULL;
+	}
+
+
+	IState<T>* reset(IState<T>* state) {
+		release();
+		_self = state;
+		return _self;
+	}
+
+
+protected:
+	I<T>* _self;
 };
 
-#endif
+/**
+ * A PIMPL class for an IState object.
+ *
+ * This class expects to:
+ * 1. Fully own its enclosed object; and
+ * 2. Have its internal pointer not aliased anywhere (C99 restrict here?).
+ *
+ * There's no ownership transfer on any of the copying methods, and therefore,
+ * it should be totally safe to use on STL containers. However, beware of the
+ * copying times, as it may depend on various factors, such as problem size
+ * and specific implementation details. In case this may turn to be a problem,
+ * instead of relying on the default copying methods, the client should
+ * instantiate and execute a copy operator, and then implement his own waiting
+ * scheme (e.g. waiting for conclusion on another thread).
+ */
+template <typename T> class State : public IState<T>, public Cheshire<T, IState> {
+public:
+	typedef Cheshire<T, IState> SuperType;
+
+	State() :
+		SuperType::_self(NULL) {}
+
+
+	explicit State(const State<T>& rhs) :
+		SuperType::_self(rhs._self != NULL ? rhs._self->clone() : NULL) {}
+
+
+	explicit State(const IState<T>& rhs) :
+		SuperType::_self(rhs.clone()) {}
+
+
+	explicit State(IState<T>* self) :
+		SuperType::_self(self) {}
+
+
+	State(const IImplementation<T>& impl) :
+		SuperType::_self(impl.newState()) {}
+
+
+	~State() {
+		delete SuperType::_self;
+	}
+
+
+	State<T>& operator=(const State<T>& other) {
+		if (&other != this)
+			return this->operator=(*other._self);
+		return *this;
+	}
+
+
+	State<T>& operator=(IState<T>& other) {
+		if (&other != SuperType::_self) {
+			IOperator<T>* op = implementation().newOperator(OPER_COPY);
+			OperatorArgs<T> args(*SuperType::_self);
+			args.waiting(true);
+			args.other(other);
+			op->run(args);
+			op->wait();
+			delete op;
+		}
+		return *this;
+	}
+
+	inline const IImplementation<T>& implementation() const
+		{ assert(SuperType::_self != NULL, "Missing internal pointer."); return SuperType::_self->implementation(); }
+
+	inline IState<T>* clone(const IState<T>* other = NULL) const
+		{ assert(SuperType::_self != NULL, "Missing internal pointer."); return SuperType::_self->clone(other); }
+
+	inline bool isValid() const
+		{ assert(SuperType::_self != NULL, "Missing internal pointer."); return SuperType::_self->isValid(); }
+
+	inline size_t implSize() const
+		{ assert(SuperType::_self != NULL, "Missing internal pointer."); return SuperType::_self->implSize(); }
+
+	inline size_t diffSize() const
+		{ assert(SuperType::_self != NULL, "Missing internal pointer."); return SuperType::_self->diffSize(); }
+
+	inline size_t octSize() const
+		{ assert(SuperType::_self != NULL, "Missing internal pointer."); return SuperType::_self->octSize(); }
+
+	inline bool rowMajor() const
+		{ assert(SuperType::_self != NULL, "Missing internal pointer."); return SuperType::_self->rowMajor(); }
+
+	inline void copyTo(T* ptr) const
+		{ assert(SuperType::_self != NULL, "Missing internal pointer."); SuperType::_self->copyTo(ptr); }
+
+	inline void setup(size_t diffSize, T* rawInput, bool rowMajor, void* implOptions = NULL)
+		{ assert(SuperType::_self != NULL, "Missing internal pointer."); SuperType::_self->setup(diffSize, rawInput, rowMajor, implOptions); }
+
+};
+
+
+/**
+ * A PIMPL class for an IOperator object.
+ *
+ * This class is more akin to an auto_ptr than the other two. Any copying
+ * operation, be it by constructor or assignment, will transfer ownership
+ * around.
+ *
+ * @see ukoct::IOperator<T>
+ */
+template <typename T> class Operator : public IOperator<T>, public Cheshire<T, IOperator> {
+public:
+	typedef Cheshire<T, IOperator> SuperType;
+
+	Operator() :
+		SuperType::_self(NULL) {}
+
+
+	Operator(const Operator<T>& rhs) :
+		SuperType::_self(rhs._self)
+	{
+		rhs._self = NULL;
+	}
+
+
+	Operator(IOperator<T>* rhs) :
+		SuperType::_self(rhs) {}
+
+
+	Operator(const IState<T>& state, EOperation oper, OperationDetails details = 0, bool matchAnyDetails = false) :
+		SuperType::_self(NULL) { setup(state.implementation(), oper, details, matchAnyDetails); }
+
+
+	Operator(const IImplementation<T>& impl, EOperation oper, OperationDetails details = 0, bool matchAnyDetails = false) :
+		SuperType::_self(NULL) { setup(impl, oper, details, matchAnyDetails); }
+
+
+	~Operator() {
+		delete SuperType::_self;
+	}
+
+
+	inline ukoct::EOperation operation() const
+		{ assert(SuperType::_self != NULL, "Missing internal pointer."); return SuperType::_self->operation(); }
+
+	inline ukoct::OperationDetails details() const
+		{ assert(SuperType::_self != NULL, "Missing internal pointer."); return SuperType::_self->details(); }
+
+	inline void run(const OperatorArgs<T>& args) const
+		{ assert(SuperType::_self != NULL, "Missing internal pointer."); SuperType::_self->run(args); }
+
+	inline bool isFinished()
+		{ assert(SuperType::_self != NULL, "Missing internal pointer."); return SuperType::_self->isFinished(); }
+
+	inline void wait()
+		{ assert(SuperType::_self != NULL, "Missing internal pointer."); SuperType::_self->wait(); }
+
+	inline bool boolResult() const
+		{ assert(SuperType::_self != NULL, "Missing internal pointer."); return SuperType::_self->boolResult(); }
+
+	inline const std::vector<Timing>& timings() const
+		{ assert(SuperType::_self != NULL, "Missing internal pointer."); return SuperType::_self->timings(); }
+
+private:
+	void setup(const IImplementation<T>& impl, EOperation oper, OperationDetails details = 0, bool matchAnyDetails = false) {
+		SuperType::_self = impl.newOperator(oper, details, matchAnyDetails);
+		assert(SuperType::_self != NULL, "Operator is not present for the implementation.");
+	}
+
+};
+
+
+/**
+ * A PIMPL class for an IImplementation object.
+ *
+ * The behaviour of `delete` is dependent on how the Implementation object was
+ * initialized:
+ * 1. If initialized with a `const IImplementation<T>*`, the Implementation
+ *    object won't "own" the pointer to IImplementation.
+ * 2. If initialized with a `IImplementation<T>*`, the Implementation object
+ *    will take ownership of the implementation it is wrapping, and at
+ *    finalization, it will delete said pointer.
+ *
+ * Note that copying is not permitted, just as the original interface doesn't
+ * provide means for that. However, it can be default-constructed. For that,
+ * this class CAN NOT be used on STL containers.
+ *
+ * @see ukoct::IImplementation<T>
+ */
+template <typename T> class Implementation : public IImplementation<T>, public Cheshire<T, IImplementation> {
+public:
+	typedef Cheshire<T, IImplementation> SuperType;
+
+	Implementation() :
+		SuperType::_self(NULL),
+		_trueSelf(NULL) {}
+
+
+	Implementation(const IImplementation<T>* impl) :
+		SuperType::_self(NULL),
+		_trueSelf(impl) {}
+
+
+	Implementation(IImplementation<T>* impl) :
+		SuperType::_self(impl),
+		_trueSelf(impl) {}
+
+
+	~Implementation() {
+		delete SuperType::_self;
+	}
+
+
+	inline EImplementation type() const
+		{ assert(_trueSelf != NULL, "Missing internal pointer."); return _trueSelf->type(); }
+
+	inline bool intBased() const
+		{ assert(_trueSelf != NULL, "Missing internal pointer."); return _trueSelf->intBased(); }
+
+	inline EElemType elemType() const
+		{ assert(_trueSelf != NULL, "Missing internal pointer."); return _trueSelf->elemType(); }
+
+	inline T infinity() const
+		{ assert(_trueSelf != NULL, "Missing internal pointer."); return _trueSelf->infinity(); }
+
+	inline IState<T>* newState() const
+		{ assert(_trueSelf != NULL, "Missing internal pointer."); return _trueSelf->newState(); }
+
+	inline void getDetails(std::map<EOperation, std::vector<OperationDetails> >& result, size_t maxOpers = 0, EOperation oper = OPER_NONE, OperationDetails details = 0, bool matchAnyDetails = false) const
+		{ assert(_trueSelf != NULL, "Missing internal pointer."); _trueSelf->getDetails(result, maxOpers, oper, details, matchAnyDetails); }
+
+	inline void filterOperators(std::vector<const IOperator<T>*>& result, size_t maxOpers = 0, EOperation oper = OPER_NONE, OperationDetails details = 0, bool matchAnyDetails = false) const
+		{ assert(_trueSelf != NULL, "Missing internal pointer."); _trueSelf->filterOperators(result, maxOpers, oper, details, matchAnyDetails); }
+
+	inline IOperator<T>* newOperator(EOperation oper, OperationDetails details = 0, bool matchAnyDetails = false) const
+		{ assert(_trueSelf != NULL, "Missing internal pointer."); return _trueSelf->newOperator(oper, details, matchAnyDetails); }
+
+private:
+	const IImplementation<T>* _trueSelf;
+};
+
 
 }
 

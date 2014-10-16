@@ -3,6 +3,8 @@
 
 #include <cstddef>
 #include <sstream>
+#include <ctime>
+#include <iomanip>
 #include "ezOptionParser.hpp"
 #include "ukoct.hpp"
 
@@ -18,25 +20,45 @@
 
 #define ukoct_AVAILABLE_IMPL "cpu, opencl"
 
-#define EXAMPLETEXT  "Simplest usage: `" ukoct_NAME " in.plas` (default operator: closure)"
 #define OVERVIEWTEXT ukoct_BRIEF
-#define USAGETEXT     ukoct_NAME " [OPTIONS] <INPUT> [OPER [INPUT]] [-o OUTPUT]\n" \
+
+#define USAGETEXT \
+	ukoct_NAME " [OPTIONS] <INPUT> [OPER [INPUT]] [-o OUTPUT]\n\n" \
 	"If <INPUT> equals \"-\", STDIN is used.\n" \
 	"If <OUTPUT> equals \"-\", STDOUT is used."
 
-#define HEADERTEXT \
-	VERSIONTEXT "\n" \
-	OVERVIEWTEXT
+#define EXAMPLETEXT  "\t$ " ukoct_NAME " in.plas +sat?\n"
 
-#define FOOTERTEXT "\n\n" ukoct_NAME " is provided without warranty blabla (and I really need to put a proper license on this).\n"
+#define HEADERTEXT \
+	ukoct_RELEASENAME "\n" \
+	ukoct_BRIEF
+
+#define DISCLAIMER "\n" \
+	"This is a free and open-source software under MIT license.\n" \
+	"Please refer to the source code for full license and conditions.\n" \
+	"There is NO warranty, not even for MERCHANTABILITY or FITNESS FOR A\n"\
+	"PARTICULAR PURPOSE.\n"
 
 #define VERSIONTEXT \
-	ukoct_RELEASENAME
+	ukoct_RELEASENAME "\n" \
+	ukoct_BRIEF "\n" \
+	"Authors: " ukoct_AUTHORS "\n" \
+	DISCLAIMER
 
 #define HELPTEXT \
-	HEADERTEXT "\n" \
-	"UK because of UKC. Go google it, you'll understand (maybe?).\n" \
-	"Authors: " ukoct_AUTHORS
+	HEADERTEXT
+
+#define FOOTERTEXT "\n" \
+	"For bug reports, feature requests and other issues,\n" \
+	"please use the issue tracker for the project at GitHub:\n" \
+	"<https://github.com/flisboac/ukoct/issues>\n"
+
+
+#ifdef ukoct_DEBUG
+#	define ukoct_DBG(o) o
+#else
+#	define ukoct_DBG(o)
+#endif
 
 
 //
@@ -47,7 +69,6 @@
 enum EStage {
 	STAGE_PREPARE, // Initial stages of object construction.
 	STAGE_PARSE,   // Command-line parsing and gathering of basic (general) options.
-	STAGE_PREINIT, // Execute
 	STAGE_INIT,    // Instantiation of implementation states, matrices and operators.
 	STAGE_RUN,     // Operations' execution.
 	STAGE_FINISH   // Destruction of used objects (implementation states and all the like)
@@ -137,6 +158,32 @@ enum EOption {
 };
 
 
+struct ArgState;
+struct Operand;
+struct InputStream;
+struct OutputStream;
+struct Timing;
+
+struct OptionGroup;
+struct Option;
+struct TypeName;
+struct OperDetailValue;
+
+struct IOptionCallback;
+struct IOperationCallback;
+
+
+struct IOptionCallback {
+	virtual ~IOptionCallback() {}
+	virtual bool operator()(ArgState& A, Operand& operand) const = 0;
+};
+
+
+struct NullStream : public std::stringstream {
+	NullStream() { setstate(std::ios_base::badbit); }
+};
+
+
 struct OptionGroup {
 	EOptionGroup id;
 	const char* name;
@@ -148,6 +195,7 @@ struct Option {
 	EOption id;
 	EOptionGroup group;
 	EAction action;
+
 	ukoct::EOperation operation;
 	bool required;
 	int nargs;
@@ -195,6 +243,76 @@ enum EVerboseLevel {
 };
 
 
+struct Timing {
+	clock_t clockStart;
+	clock_t clockEnd;
+	Timing() : clockStart(0), clockEnd(0) {}
+	Timing(const Timing& other) = default;
+	inline void start() { clockStart = clock(); }
+	inline void end() {
+		ukoct_ASSERT(isStarted(), "end() can only be called after start().");
+		clockEnd = clock();
+	}
+	inline bool isStarted() const { return clockStart != 0; }
+	inline bool isFinished() const { return clockEnd != 0; }
+	inline clock_t diff() const {
+		ukoct_ASSERT(isFinished(), "diff() can only be called after end().");
+		return clockEnd - clockStart;
+	}
+	inline clock_t rem() const {
+		return diff() % CLOCKS_PER_SEC;
+	}
+	inline void print(std::ostream& os, int precision = 5) const {
+		double tsec = sec();
+		const char* suffix = "s";
+		double t = sec();
+
+		if (t < 1) {
+			t *= 1000;
+			suffix = "ms";
+
+			if (t < 1) {
+				t *= 1000;
+				suffix = "us";
+			}
+
+		} else if (t >= 1000) {
+			t /= 60;
+			suffix = "m";
+
+			if (t >= 1000) {
+				t /= 24;
+				suffix = "h";
+			}
+		}
+
+		os << std::fixed << std::setw(0) << std::setprecision(precision) << t << suffix;
+	}
+	inline double sec() const {
+		ukoct_ASSERT(isStarted(), "end() can only be called after start().");
+		return static_cast<double>(diff()) / static_cast<double>(CLOCKS_PER_SEC);
+	}
+	inline double msec() const {
+		return sec() * 1000;
+	}
+	inline double usec() const {
+		return sec() * 1000 * 1000;
+	}
+	inline double min() const {
+		return sec() / 60;
+	}
+	inline double hour() const {
+		return sec() / 24;
+	}
+};
+
+
+inline std::ostream& operator<<(std::ostream& os, const Timing& timing) {
+	timing.print(os);
+	return os;
+}
+
+
 struct InputStream {
 	std::string fileName;
 	std::istream* stream;
@@ -225,23 +343,19 @@ struct OutputStream {
 	std::string fileName;
 	std::ostream* stream;
 	std::ofstream* fileStream;       // NOTE: Streams cannot be declared by value if the class is supposed to be
-	std::stringstream* stringStream; // used with a STL container, because streams are neither movable nor copyable.
 	OutputStream()
 		: fileName()
 		, stream(NULL)
 		, fileStream(NULL)
-		, stringStream(NULL)
 		{}
 	OutputStream(const char* fn)
 		: fileName(fn)
 		, stream(NULL)
 		, fileStream(NULL)
-		, stringStream(NULL)
 		{}
 	OutputStream(const OutputStream& rhs) = default;
 	~OutputStream() {
 		if (fileStream != NULL) delete fileStream;
-		if (stringStream != NULL) delete stringStream;
 	}
 	inline bool isParsed() { return stream != NULL; }
 };
@@ -254,6 +368,11 @@ struct Operand {
 	ez::OptionGroup* ezGroup;
 	std::vector<std::string> args;
 	int parseIndex;
+	EStage stage;
+
+	// Performance info
+	Timing initTiming;
+	Timing execTiming;
 
 	// For operators
 	InputStream inputStream;
@@ -268,6 +387,9 @@ struct Operand {
 		, ezGroup(NULL)
 		, args()
 		, parseIndex(-1)
+		, stage(STAGE_PREPARE)
+		, initTiming()
+		, execTiming()
 		, inputStream()
 		, outputStream()
 		, var(0)
@@ -280,6 +402,9 @@ struct Operand {
 		, ezGroup(other.ezGroup)
 		, args(other.args)
 		, parseIndex(other.parseIndex)
+		, stage(STAGE_PREPARE)
+		, initTiming()
+		, execTiming()
 		, inputStream(other.inputStream)
 		, outputStream(other.outputStream)
 		, var(other.var)
@@ -292,6 +417,9 @@ struct Operand {
 		, ezGroup(NULL)
 		, args()
 		, parseIndex(-1)
+		, stage(STAGE_PREPARE)
+		, initTiming()
+		, execTiming()
 		, inputStream(inpf)
 		, outputStream(outf)
 		, var(0)
@@ -321,10 +449,6 @@ struct OperDetails {
 };
 
 
-struct NullStream : public std::stringstream {
-	NullStream() { setstate(std::ios_base::badbit); }
-};
-
 static NullStream nullstream;
 
 struct ArgState {
@@ -333,6 +457,7 @@ struct ArgState {
 	int exitCode;
 	std::ostream* slog;
 	std::ostream* serr;
+	std::ostream* sout;
 	EVerboseLevel verbose;
 	int maxTime;
 	Operand inputOperand;
@@ -350,17 +475,20 @@ struct ArgState {
 		, outputOperand("", "-")
 		, implType(ukoct::IMPL_OPENCL)
 		, elemType(ukoct::ELEM_FLOAT)
+		, sout(&std::cout)
 		, slog(&std::cerr)
 		, serr(&std::cerr)
 		{}
-	inline std::ostream& dbg(bool withHeader = true)  { return verbose >= VERB_DEBUG ? (slog != NULL ? *slog << (withHeader ? ". [DBG] " : "") : nullstream) : nullstream; }
-	inline std::ostream& log(bool withHeader = true)  { return verbose >= VERB_VERBOSE ? (slog != NULL ? *slog << (withHeader ? "- [LOG] " : "") : nullstream) : nullstream; }
+	~ArgState();
+	inline std::ostream& dbg(bool withHeader = true)  { return verbose >= VERB_DEBUG ? (slog != NULL ? *slog << (withHeader ? ". [ DBG] " : "") : nullstream) : nullstream; }
+	inline std::ostream& log(bool withHeader = true)  { return verbose >= VERB_VERBOSE ? (slog != NULL ? *slog << (withHeader ? "- [ LOG] " : "") : nullstream) : nullstream; }
+	inline std::ostream& prof(bool withHeader = true) { return verbose >= VERB_NORMAL ? (slog != NULL ? *slog << (withHeader ? "@ [PROF] " : "") : nullstream) : nullstream; }
 	inline std::ostream& warn(bool withHeader = true) { return verbose >= VERB_NORMAL ? (slog != NULL ? *slog << (withHeader ? "! [WARN] " : "") : nullstream) : nullstream; }
-	inline std::ostream& err(bool withHeader = true)  { return verbose >= VERB_NORMAL ? (serr != NULL ? *serr << (withHeader ? "* [ERROR] " : "") : nullstream) : nullstream; }
+	inline std::ostream& err(bool withHeader = true)  { return verbose >= VERB_NORMAL ? (serr != NULL ? *serr << (withHeader ? "* [ ERR] " : "") : nullstream) : nullstream; }
 	bool initialize();
 	bool parseArgs(int argc, const char** argv);
 	bool parseOperands();
-	void run();
+	void executeOperands();
 
 private:
 	bool parseInputOperand(Operand& operand);
@@ -385,6 +513,58 @@ extern const IOperationCallback* const ocb_cpu_flt;
 extern const IOperationCallback* const ocb_cpu_dbl;
 extern const IOperationCallback* const ocb_cpu_ldbl;
 extern const IOperationCallback* const ocb_opencl_flt;
+
+
+
+template <typename T> plas::Problem<T, plas::DenseMatrix>* loadProblem(ArgState& A, Operand& O) {
+	plas::Problem<T, plas::DenseMatrix>* problem = new plas::Problem<T, plas::DenseMatrix>();
+	bool ret = plas::open(*O.inputStream.stream, *problem, &A.log(false));
+
+	if (ret) {
+		if (problem->problemType() == plas::PROBLEM_OCT) {
+			plas::Problem<T, plas::DenseMatrix>* other = new plas::Problem<T, plas::DenseMatrix>();
+			ret = plas::toOctDiffProblem(*problem, *other, &A.log(false));
+			delete problem;
+			problem = other;
+			ret = false;
+
+		} else if (problem->problemType() != plas::PROBLEM_OCTDIFF) {
+			A.err() << "Invalid problem type on input '" << O.inputStream.fileName << "'." << std::endl;
+			delete problem;
+			problem = NULL;
+			ret = false;
+		}
+	}
+
+	if (ret) {
+		if (O.optionId == OPT_OP_PUSHC) {
+			A.err() << "pushc not yet implemented, sorry!" << std::endl;
+			A.exitCode = RETNOTIMPL;
+
+		} else if (O.optionId == OPT_OP_PUSHD) {
+			A.err() << "pushd not yet implemented, sorry!" << std::endl;
+			A.exitCode = RETNOTIMPL;
+		}
+	}
+
+	return problem;
+}
+
+
+template <typename T> void finalizeProblem(ArgState& A, Operand& O) {
+	if (O.octCons != NULL) {
+		plas::OctConstraint<T>* c = reinterpret_cast<plas::OctConstraint<T>*>(O.octCons);
+		delete c;
+		O.octCons = NULL;
+	}
+
+	if (O.diffCons != NULL) {
+		plas::OctDiffConstraint<T>* c = reinterpret_cast<plas::OctDiffConstraint<T>*>(O.diffCons);
+		delete c;
+		O.diffCons = NULL;
+	}
+}
+
 
 
 #endif /* MAIN_HPP_ */

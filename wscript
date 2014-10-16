@@ -85,6 +85,8 @@ BUILDS = {
 
 	'debug': {
 		'all': {
+			'defines': ['ukoct_DEBUG'],
+			
 			'+cxxflags  CXX_NAME == "gcc"  ': ['-g', '-O1'],
 			'+linkflags CXX_NAME == "gcc"  ': ['-g'],
 
@@ -95,6 +97,8 @@ BUILDS = {
 
 	'full-debug': {
 		'all': {
+			'defines': ['ukoct_DEBUG'],
+			
 			'+cxxflags  CXX_NAME == "gcc"  ': ['-g3', '-fno-inline', '-O0'],
 			'+linkflags CXX_NAME == "gcc"  ': ['-g3'],
 
@@ -113,6 +117,8 @@ BUILDS = {
 
 	'profile': {
 		'all': {
+			'defines': ['ukoct_DEBUG'],
+			
 			'+cxxflags  CXX_NAME == "gcc"  ': ['-g', '-pg'],
 			'+linkflags CXX_NAME == "gcc"  ': ['-g', '-pg'],
 
@@ -122,6 +128,8 @@ BUILDS = {
 
 	'profile-valgrind': {
 		'all': {
+			'defines': ['ukoct_DEBUG'],
+			
 			'+cxxflags  CXX_NAME == "gcc"  ': ['-O2', '-g'],
 			'+linkflags CXX_NAME == "gcc"  ': ['-g'],
 		},
@@ -148,6 +156,65 @@ def build(ctx):
 	ctx.add_post_fun(waf_unit_test.set_exit_code)
 
 
+def generate_problems(ctx):
+	"""Generates the problems to be used on benchmarks and tests."""
+	import random
+	import subprocess
+	output_folder = "problems"
+	problem_type = 'octdiff'
+	command = "./plas.py"
+	nvals = 10
+	min_val = 1
+	max_val = 100
+	mut_chance = 1/8
+	inc_chance = 0.9
+	nvars_list = [2, 3, 5, 10, 15, 20]
+	output_format = "{}-problem-@n-@s.@t.plas"
+	totals_per_mode = [(25, 0, 0), (25, inc_chance, 0), (25, 0, mut_chance), (25, inc_chance, mut_chance)] # No mutation, only removal, only mutation, removal + mutation
+	abs_totals = 0
+	
+	for x in totals_per_mode:
+		abs_totals += x[0]
+	problems_node = ctx.path.make_node(output_folder)
+	problems_node.delete()
+	problems_node.mkdir()
+
+	for nvars in nvars_list:
+		nvars_name = "%dv" % nvars
+		nvars_node = problems_node.make_node(nvars_name)
+		nvars_node.mkdir()
+		number_seed = int(random.uniform(1, 2**32 - 1)) # int(random.uniform(1, 2 ** (2 ** 6) + 1) % sys.maxsize)
+		remove_seed = int(random.uniform(1, 2**32 - 1)) # int(random.uniform(1, 2 ** (2 ** 6) + 1) % sys.maxsize)
+		mutate_seed = int(random.uniform(1, 2**32 - 1)) # int(random.uniform(1, 2 ** (2 ** 6) + 1) % sys.maxsize)
+		count = 1
+		for totals_idx in range(len(totals_per_mode)):
+			totals = totals_per_mode[totals_idx][0]
+			totals_inc_chance = totals_per_mode[totals_idx][1]
+			totals_mut_chance = totals_per_mode[totals_idx][2]
+			cmdline = [command,
+				"gen",
+				"--problem-type=%s" % problem_type,
+				"--nvars=%d" % nvars,
+				"--nvals=%d" % nvals,
+				"--min=%g" % min_val,
+				"--max=%g" % max_val,
+				"--nproblems=%d" % totals,
+				"--nproblems-startnum=%d" % count,
+				"--nproblems-total=%d" % abs_totals,
+				"--output=%s" % (nvars_node.abspath() + "/" + output_format.format(nvars_name)),
+				"--seed=%d" % number_seed,
+				"--mutation-seed=%d" % mutate_seed,
+				"--inclusion-seed=%d" % remove_seed,
+				"--mutation-chance=%g" % totals_mut_chance,
+				"--inclusion-chance=%g" % totals_inc_chance,
+			]
+			print("Generating problems: \"%s\"" % (" ".join(cmdline)) )
+			result = subprocess.call(cmdline)
+			if result:
+				print("ERROR while generating previous command! Exit code: %d" % result)
+			count += totals
+		
+
 def clsources(ctx):
 	"""Generates OpenCL source code from the includes."""
 	# TODO Use regex instead
@@ -173,14 +240,3 @@ def clsources(ctx):
 		float_clsource.append(source[source.find("(") + 1 : source.rfind(")")])
 	ctx.path.make_node("float.cl").write(''.join(float_clsource))
 
-
-def generate_operator(ctx):
-	pass
-
-#def distclean(ctx):
-#	import shutil
-#	pycache_node = ctx.path.find_node('__pycache__')
-#	shutil.rmtree(pycache_node.abspath())
-#	for node in ctx.path.ant_glob('*.log'):
-#		node.delete()
-#	ctx.execute()

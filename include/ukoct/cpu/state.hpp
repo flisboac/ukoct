@@ -2,6 +2,7 @@
 #define UKOCT_CPU_STATE_HPP_
 
 #include <algorithm>
+#include "plas.hpp"
 
 #include "ukoct/cpu/base.hpp"
 #include "ukoct/cpu/operators.hpp"
@@ -10,93 +11,176 @@ namespace ukoct{
 
 template <typename T> class CpuState : public IState<T> {
 public:
-	const IImplementation<T>& implementation() const { return cpu<T>::impl; }
-	CpuState<T>* clone() const { return new CpuState<T>(); }
-	bool isValid() const { return _valid; }
-	size_t diffSize() const { return _self.colsize(); }
-	bool rowMajor() const { return _self.ordering() == plas::MATRIX_ROWMAJOR ? true : false; }
-	void copyTo(T* ptr) const { std::copy(_input.begin(), _input.end(), ptr); }
-	void setup(size_t diffSize, T* rawInput, bool rowMajor, void* implOptions = NULL) {
+	CpuState() :
+		_valid(false),
+		_impl(NULL),
+		_selfImpl(NULL),
+		_self() {}
+
+
+	CpuState(const CpuState<T>& other)  :
+		_valid(other._valid),
+		_impl(other._impl),
+		_selfImpl(other._selfImpl),
+		_self(other._self) {}
+
+
+	CpuState(const CpuImplementation<T>* impl) :
+		_valid(false),
+		_impl(impl),
+		_selfImpl(NULL),
+		_self() {}
+
+
+	CpuState(CpuImplementation<T>* impl)  :
+		_valid(false),
+		_impl(impl),
+		_selfImpl(impl),
+		_self() {}
+
+
+	~CpuState() {
+		delete _selfImpl;
+	}
+
+
+	const IImplementation<T>& implementation() const {
+		ukoct::assert(_impl != NULL, "Missing internal IImplementation pointer.");
+		return *_impl;
+	}
+
+
+	CpuState<T>* clone() const {
+		return new CpuState<T>(*this);
+	}
+
+
+	bool isValid() const {
+		return _impl != NULL && _valid;
+	}
+
+
+	size_t implSize() const {
+		return _self.colsize();
+	}
+
+
+	bool rowMajor() const {
+		return _self.ordering() == plas::MATRIX_ROWMAJOR ? true : false;
+	}
+
+
+	void copyTo(T* ptr) const {
+		std::copy(_self.raw(), _self.raw() + (implSize() * implSize()), ptr);
+	}
+
+
+	plas::DenseMatrix<T>& input() {
+		return _self;
+	}
+
+
+	void setup(size_t diffSize, T* rawInput, bool rowMajor) {
 		assertStateOptions(_valid, diffSize, rawInput, rowMajor);
 		_self = plas::DenseMatrix<T>(diffSize, diffSize, rowMajor ? plas::MATRIX_ROWMAJOR : plas::MATRIX_COLMAJOR, implementation().infinity());
 		std::copy(rawInput, rawInput + (diffSize * diffSize), _self.raw());
 		_valid = true;
 	}
 
-	plas::DenseMatrix<T>& self() { return _self; }
+
+	plas::DenseMatrix<T>& self() {
+		return _self;
+	}
 
 private:
 	bool _valid;
+	ukoct::CpuImplementation<T>* _selfImpl;
+	const ukoct::CpuImplementation<T>* _impl;
 	plas::DenseMatrix<T> _self;
 };
 
+
 template <typename T> class CpuImplementation : public IImplementation<T> {
 public:
-	inline bool isImplemented() const { return true; }
-	inline EImplementation type() const { return IMPL_CPU; }
-	inline IState<T>* newState() const { return new CpuState<T>(); }
-	inline const IOperator<T> * const* getOperators(size_t& numOperators) const { return _operators; }
+	EImplementation type() const {
+		return IMPL_CPU;
+	}
 
-private:
-	static const impl::cpu::CopyCpuOperator<T>             copyOperator;
-	static const impl::cpu::IsConsistentCpuOperator<T>     isConsistentOperator;
-	static const impl::cpu::IsIntConsistentCpuOperator<T>  isIntConsistentOperator;
-	static const impl::cpu::IsCoherentCpuOperator<T>       isCoherentOperator;
-	static const impl::cpu::IsClosedCpuOperator<T>         isClosedOperator;
-	static const impl::cpu::IsStronglyClosedCpuOperator<T> isStronglyClosedOperator;
-	static const impl::cpu::IsTightlyClosedCpuOperator<T>  isTightlyClosedOperator;
-	static const impl::cpu::IsWeaklyClosedCpuOperator<T>   isWeaklyClosedOperator;
-	static const impl::cpu::IsTopCpuOperator<T>            isTopOperator;
 
-	static const impl::cpu::ClosureCpuOperator<T>      closureOperator;
-	static const impl::cpu::TightClosureCpuOperator<T> tightClosureOperator;
-	static const impl::cpu::ShortestPathCpuOperator<T> shortestPathOperator;
-	static const impl::cpu::StrengthenCpuOperator<T>   strengthenOperator;
-	static const impl::cpu::TightenCpuOperator<T>      tightenOperator;
-	static const impl::cpu::TopCpuOperator<T>          topOperator;
+	bool intBased() const {
+		return ElemTypeInfo<T>::intBased;
+	}
 
-	static const impl::cpu::PushDiffConsCpuOperator<T> pushDiffConsOperator;
-	static const impl::cpu::PushOctConsCpuOperator<T>  pushOctConsOperator;
-	static const impl::cpu::ForgetOctVarCpuOperator<T> forgetOctVarOperator;
 
-	static const impl::cpu::EqualsCpuOperator<T>       equalsOperator;
-	static const impl::cpu::IncludesCpuOperator<T>     includesOperator;
-	static const impl::cpu::UnionCpuOperator<T>        unionOperator;
-	static const impl::cpu::IntersectionCpuOperator<T> intersectionOperator;
+	EElemType elemType() const {
+		return ElemTypeInfo<T>::elemType;
+	}
 
-	static const IOperator<T>* const _operators[] = {
-		copyOperator
-		, isConsistentOperator
-		, isIntConsistentOperator
-		, isCoherentOperator
-		, isClosedOperator
-		, isStronglyClosedOperator
-		, isTightlyClosedOperator
-		, isWeaklyClosedOperator
-		, isTopOperator
 
-		, closureOperator
-		, tightClosureOperator
-		, shortestPathOperator
-		, strengthenOperator
-		, tightenOperator
-		, topOperator
+	T infinity() const {
+		return ElemTypeInfo<T>::infinity();
+	}
 
-		, pushDiffConsOperator
-		, pushOctConsOperator
-		, forgetOctVarOperator
 
-		, equalsOperator
-		, includesOperator
-		, unionOperator
-		, intersectionOperator
-	};
+	CpuState<T>* newState() const {
+		return new CpuState<T>(this);
+	}
+
+
+	void getDetails(std::map<EOperation, std::vector<OperationDetails> >& result, size_t maxOpers = 0, EOperation oper = OPER_NONE, OperationDetails details = 0, bool matchAnyDetails = false) const {
+
+	}
+
+
+	void filterOperators(std::vector<IOperator<T>*>& result, size_t maxOpers = 0, EOperation oper = OPER_NONE, OperationDetails details = 0, bool matchAnyDetails = false) const {
+		// TODO Implementation
+	}
 };
 
-template <typename T> struct cpu {
-	static const CpuImplementation<T> impl;
+namespace impl {
+namespace cpu {
+
+extern const CpuImplementation<float> floatImpl;
+extern const CpuImplementation<double> doubleImpl;
+extern const CpuImplementation<long double> ldoubleImpl;
+
+}
+}
+
+
+template <typename T> struct ImplementationInfo<T, IMPL_CPU> {
+	static constexpr bool valid = true;
+	static constexpr EImplementation type = IMPL_CPU;
+	static constexpr bool intBased = ElemTypeInfo<T>::intBased;
+	static constexpr EElemType elemType = ElemTypeInfo<T>::elemType;
+	static constexpr size_t elemSize = ElemTypeInfo<T>::elemSize;
+	static T infinity() { return ElemTypeInfo<T>::infinity(); }
+	static T floor(T n) { return ElemTypeInfo<T>::floor(n); }
+	static T mod(T n, T d) { return ElemTypeInfo<T>::mod(n, d); }
+	static IImplementation<T>* newImplementation() { return new CpuImplementation<T>(); }
+	static const IImplementation<T>* implementation() {
+		switch(elemType) {
+		case ELEM_FLOAT  : return impl::cpu::floatImpl  ; break;
+		case ELEM_DOUBLE : return impl::cpu::doubleImpl ; break;
+		case ELEM_LDOUBLE: return impl::cpu::ldoubleImpl; break;
+		}
+		return NULL;
+	}
 };
 
+
+}
+
+namespace ukoct {
+namespace impl {
+namespace cpu {
+
+const ukoct::CpuImplementation<float> floatImpl;
+const ukoct::CpuImplementation<double> doubleImpl;
+const ukoct::CpuImplementation<long double> ldoubleImpl;
+
+}
+}
 }
 
 

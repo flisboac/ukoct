@@ -341,6 +341,8 @@ public:
 	}
 	T* raw()
 		{ return _rawdata != NULL ? _rawdata : &_data[0]; }
+	const T* raw() const
+		{ return _rawdata != NULL ? _rawdata : &_data[0]; }
 	DenseMatrix& copyto(IMatrix<T>& to) {
 		for (var_t r = 1; r <= _colsize; ++r)
 			for (var_t c = 1; c <= _rowsize; ++c)

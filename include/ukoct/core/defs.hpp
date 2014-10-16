@@ -3,7 +3,9 @@
 
 
 #include <string>
+#include <cmath>
 #include <exception>
+#include <iomanip>
 #include "plas.hpp"
 
 #define ukoct_STRQT(s) #s
@@ -11,7 +13,7 @@
 
 #define ukoct_NAME "uksat"
 #define ukoct_BRIEF "A simple octagon-domain-based solver in CPU/GPU."
-#define ukoct_AUTHORS "Flavio Lisboa <fl81@kent.ac.uk>"
+#define ukoct_AUTHORS "Flavio Lisboa <flisboa.costa@gmail.com>"
 #define ukoct_MAJORVERSION 0
 #define ukoct_MINORVERSION 2
 #define ukoct_PATCHVERSION 0
@@ -35,6 +37,12 @@
 #endif
 
 namespace ukoct {
+
+enum EErr {
+	OK = 0,
+	ERROR,
+	ERR_NOTIMPL
+};
 
 enum EImplementation {
 	IMPL_NONE,
@@ -66,6 +74,7 @@ enum EElemType {
  * enough to dispense documentation.
  */
 enum EOperation {
+	OPER_ALL = -1,
 	OPER_NONE,              //!< No-op.
 	OPER_COPY,              //!< Implements a simple matrix-to-matrix copy (copy assignment operation).
 	OPER_ISCONSISTENT,      //!< @see IOctDbm<T>::consistent
@@ -138,11 +147,12 @@ enum EOperDetails {
 
 	// Implementation Details, mutually inclusive
 	O_IMPL_BASE_ = O_EXEC_BASE_ + 3,
-	O_IMPL_INTERM = 1 << O_IMPL_BASE_,      // Implements an intermediate stage of an operation
-	O_IMPL_PROXY = 1 << (O_IMPL_BASE_ + 1), // This implementation is a proxy, one or more operators may be internally executed in indeterminate order to implement the operation
+	O_IMPL_INTERM = 1 << O_IMPL_BASE_,       // Implements an intermediate stage of an operation
+	O_IMPL_PROXY = 1 << (O_IMPL_BASE_ + 1),  // This implementation is a proxy, one or more operators may be internally executed in indeterminate order to implement the operation
+	O_IMPL_MUTATOR = 1 << (O_IMPL_BASE_ + 2), // This implementation is non-const, and may mutate the DBM state
 	O_IMPL_MIN = O_IMPL_INTERM,
-	O_IMPL_MAX = O_IMPL_PROXY,
-	O_IMPL = O_IMPL_PROXY | O_IMPL_INTERM
+	O_IMPL_MAX = O_IMPL_MUTATOR,
+	O_IMPL = O_IMPL_PROXY | O_IMPL_INTERM | O_IMPL_MUTATOR
 };
 
 
@@ -233,7 +243,285 @@ private:
 class TimeoutError : public Error {};
 
 
-static inline void assert(bool expr, const char* msg) { if (!expr) throw Error(msg); }
+enum ETimingResolution {
+	TIME_NONE,
+	TIME_NSEC, // nanosseconds
+	TIME_USEC, // microsseconds
+	TIME_MSEC, // milisseconds
+	TIME_SEC,  // seconds
+	TIME_MIN,  // minutes
+	TIME_HOUR,  // hours
+
+	TIME_MIN_ = TIME_NSEC,
+	TIME_MAX_ = TIME_HOUR
+};
+
+
+class Timing {
+public:
+	Timing() :
+		_resolution(TIME_NONE),
+		_time(),
+		_stage(0),
+		_stageName("") {}
+
+
+	Timing(double t, ETimingResolution r, const char* n = NULL, int s = 0) :
+		_resolution(r),
+		_time(t),
+		_stage(s),
+		_stageName(n) {}
+
+
+	Timing(const Timing& rhs) = default;
+
+
+	inline ETimingResolution resolution() const {
+		return _resolution;
+	}
+
+
+	inline Timing& resolution(ETimingResolution v) {
+		_resolution = v;
+		return *this;
+	}
+
+
+	inline double time() const {
+		return _time;
+	}
+
+
+	inline double time(ETimingResolution res) {
+		return convertTime(_time, _resolution, res);
+	}
+
+
+	inline Timing& time(double v) {
+		_time = v;
+		return *this;
+	}
+
+
+	inline Timing& time(double v, ETimingResolution r) {
+		_time = v; _resolution = r;
+		return *this;
+	}
+
+
+	inline int stage() const {
+		return _stage;
+	}
+
+
+	inline Timing& stage(int v) {
+		_stage = v;
+		return *this;
+	}
+
+
+	const std::string& stageName() const {
+		return _stageName;
+	}
+
+
+	Timing& stageName(const std::string& v) {
+		_stageName = v;
+		return *this;
+	}
+
+
+	Timing& stageName(const char* v) {
+		_stageName = v;
+		return *this;
+	}
+
+
+	Timing& round(unsigned int length = 3) {
+		_time = roundTime(_time, _resolution, length);
+		return *this;
+	}
+
+
+public:
+	static inline const char* timeSuffix(ETimingResolution resolution) {
+		switch(resolution) {
+		case TIME_NSEC: return "ns"; break;
+		case TIME_USEC: return "us"; break;
+		case TIME_MSEC: return "ms"; break;
+		case TIME_SEC : return "s" ; break;
+		case TIME_MIN : return "m" ; break;
+		case TIME_HOUR: return "h" ; break;
+		}
+		return "";
+	}
+
+
+	static inline double timeMult(ETimingResolution from, ETimingResolution to) {
+		switch(from) {
+		case TIME_NSEC:
+			switch(to) {
+			case TIME_NSEC: return 1; break;
+			case TIME_USEC: return 1 / 1e3; break;
+			case TIME_MSEC: return 1 / 1e6; break;
+			case TIME_SEC : return 1 / 1e9; break;
+			case TIME_MIN : return 1 / 1e9 * 60; break;
+			case TIME_HOUR: return 1 / 1e9 * 60 * 60; break;
+			}
+			break;
+		case TIME_USEC:
+			switch(to) {
+			case TIME_NSEC: return 1e3; break;
+			case TIME_USEC: return 1; break;
+			case TIME_MSEC: return 1 / 1e3; break;
+			case TIME_SEC : return 1 / 1e6; break;
+			case TIME_MIN : return 1 / 1e6 * 60; break;
+			case TIME_HOUR: return 1 / 1e6 * 60 * 60; break;
+			}
+			break;
+		case TIME_MSEC:
+			switch(to) {
+			case TIME_NSEC: return 1e6; break;
+			case TIME_USEC: return 1e3; break;
+			case TIME_MSEC: return 1; break;
+			case TIME_SEC : return 1 / 1e3; break;
+			case TIME_MIN : return 1 / 1e3 * 60; break;
+			case TIME_HOUR: return 1 / 1e3 * 60 * 60; break;
+			}
+			break;
+		case TIME_SEC :
+			switch(to) {
+			case TIME_NSEC: return 1e9; break;
+			case TIME_USEC: return 1e6; break;
+			case TIME_MSEC: return 1e3; break;
+			case TIME_SEC : return 1; break;
+			case TIME_MIN : return 1 / 60; break;
+			case TIME_HOUR: return 1 / 60 * 60; break;
+			}
+			break;
+		case TIME_MIN :
+			switch(to) {
+			case TIME_NSEC: return 60 * 1e9; break;
+			case TIME_USEC: return 60 * 1e6; break;
+			case TIME_MSEC: return 60 * 1e3; break;
+			case TIME_SEC : return 60; break;
+			case TIME_MIN : return 1; break;
+			case TIME_HOUR: return 1 / 60; break;
+			}
+			break;
+		case TIME_HOUR:
+			switch(to) {
+			case TIME_NSEC: return 60 * 60 * 1e9; break;
+			case TIME_USEC: return 60 * 60 * 1e6; break;
+			case TIME_MSEC: return 60 * 60 * 1e3; break;
+			case TIME_SEC : return 60 * 60; break;
+			case TIME_MIN : return 60; break;
+			case TIME_HOUR: return 1; break;
+			}
+			break;
+		}
+		// Raise error?
+		return 1;
+	}
+
+
+	static inline double convertTime(double time, ETimingResolution timeRes, ETimingResolution newRes) {
+		if (time != 0 && timeRes != TIME_NONE && newRes != TIME_NONE && timeRes != newRes)
+			time *= timeMult(timeRes, newRes);
+		return time;
+	}
+
+
+	static inline double roundTime(double time, ETimingResolution& timeRes, unsigned int length = 3) {
+		if (time != 0) {
+			double factor = std::pow(10, length);
+			int tres = timeRes;
+			while (factor > time && tres < TIME_MIN_) {
+				time /= factor;
+				tres -= 1;
+			}
+			while (1 > time && tres > TIME_MAX_) {
+				time *= factor;
+				tres += 1;
+			}
+			timeRes = (ETimingResolution) tres;
+		}
+		return time;
+	}
+
+private:
+	ETimingResolution _resolution; // For _time
+	double _time;
+	int _stage; // Implementation-dependent
+	std::string _stageName; // Implementation-defined
+};
+
+
+struct CpuTiming : public Timing {
+	clock_t clockStart;
+	clock_t clockEnd;
+
+	CpuTiming() : clockStart(0), clockEnd(0) {}
+	CpuTiming(const CpuTiming& other) = default;
+
+
+	inline void start() {
+		clockStart = clock();
+	}
+
+
+	inline void end() {
+		ukoct_ASSERT(isStarted(), "end() can only be called after start().");
+		clockEnd = clock();
+		time(totalSecs()).resolution(TIME_SEC).stageName("CPU Total");
+	}
+
+
+	inline bool isStarted() const {
+		return clockStart != 0;
+	}
+
+
+	inline bool isFinished() const {
+		return clockEnd != 0;
+	}
+
+
+	inline clock_t diff() const {
+		ukoct_ASSERT(isFinished(), "diff() can only be called after end().");
+		return clockEnd - clockStart;
+	}
+
+
+	inline clock_t rem() const {
+		return diff() % CLOCKS_PER_SEC;
+	}
+
+
+	inline double totalSecs() const {
+		ukoct_ASSERT(isStarted(), "end() can only be called after start().");
+		return static_cast<double>(diff()) / static_cast<double>(CLOCKS_PER_SEC);
+	}
+};
+
+
+static inline void assert(bool expr, const char* msg, int code = ERROR) { if (!expr) throw Error(code, msg); }
+
+
+inline void printTiming(double time, ETimingResolution resl, std::ostream& os, int precision = 3) {
+	std::streamsize oldprec = os.precision();
+	std::streamsize oldw = os.width();
+	os << std::fixed << std::setw(0) << std::setprecision(precision) << time << Timing::timeSuffix(resl);
+	os.unsetf(std::ios_base::floatfield);
+	os.precision(oldprec);
+	os.width(oldw);
+}
+
+
+inline void printTiming(const Timing& timing, std::ostream& os, int precision = 3) {
+	printTiming(timing.time(), timing.resolution(), os, precision);
+}
+
 
 template <typename T> static inline void assertStateOptions(bool initialized, size_t diffSize, T* rawInput, bool rowMajor) {
 	assert(!initialized, "State cannot be initialized more than once.");
@@ -244,34 +532,46 @@ template <typename T> static inline void assertStateOptions(bool initialized, si
 
 
 template <typename T> struct ElemTypeInfo {
-	static const bool specialized = false;
-	static constexpr T infinity() { return std::numeric_limits<T>::max(); }
-	static constexpr EElemType elemType() { return ELEM_NONE; }
-	static constexpr size_t elemSize() { return sizeof(T); }
+	static constexpr bool specialized = false;
+	static constexpr bool intBased = true;
+	static constexpr EElemType elemType = ELEM_NONE;
+	static constexpr size_t elemSize = sizeof(T);
+	static inline T infinity() { return std::numeric_limits<T>::max(); }
+	static inline T floor(T n) { return n; }
+	static inline T mod(T n, T d) { return n % d; }
 };
 
 
 template <> struct ElemTypeInfo<float> {
-	static const bool specialized = true;
-	static constexpr float infinity() { return std::numeric_limits<float>::infinity(); }
-	static constexpr EElemType elemType() { return ELEM_FLOAT; }
-	static constexpr size_t elemSize() { return sizeof(float); }
+	static constexpr bool specialized = true;
+	static constexpr bool intBased = false;
+	static constexpr EElemType elemType = ELEM_FLOAT;
+	static constexpr size_t elemSize = sizeof(float);
+	static inline float infinity() { return std::numeric_limits<float>::infinity(); }
+	static inline float floor(float n) { return std::floor(n); }
+	static inline float mod(float n, float d) { return std::fmod(n, d); }
 };
 
 
 template <> struct ElemTypeInfo<double> {
-	static const bool specialized = true;
-	static constexpr double infinity() { return std::numeric_limits<float>::infinity(); }
-	static constexpr EElemType elemType() { return ELEM_DOUBLE; }
-	static constexpr size_t elemSize() { return sizeof(double); }
+	static constexpr bool specialized = true;
+	static constexpr bool intBased = false;
+	static constexpr EElemType elemType = ELEM_DOUBLE;
+	static constexpr size_t elemSize = sizeof(double);
+	static inline double infinity() { return std::numeric_limits<double>::infinity(); }
+	static inline double floor(double n) { return std::floor(n); }
+	static inline double mod(double n, double d) { return std::fmod(n, d); }
 };
 
 
 template <> struct ElemTypeInfo<long double> {
-	static const bool specialized = true;
-	static constexpr long double infinity() { return std::numeric_limits<long double>::infinity(); }
-	static constexpr EElemType elemType() { return ELEM_LDOUBLE; }
-	static constexpr size_t elemSize() { return sizeof(long double); }
+	static constexpr bool specialized = true;
+	static constexpr bool intBased = false;
+	static constexpr EElemType elemType = ELEM_LDOUBLE;
+	static constexpr size_t elemSize = sizeof(long double);
+	static inline long double infinity() { return std::numeric_limits<long double>::infinity(); }
+	static inline long double floor(long double n) { return std::floor(n); }
+	static inline long double mod(long double n, long double d) { return std::fmod(n, d); }
 };
 
 

@@ -13,15 +13,27 @@ int main(int argc, const char** argv) {
 	ArgState A;
 
 	// Adds all options and sets parser up
-	if (!A.initialize()) {
-		return A.exitCode;
-	}
+	bool initialized = A.initialize();
+	//ukoct_ASSERT(initialized, "ArgState could not be initialized.");
 
 	try {
 		// Parse arguments
+		//ukoct_DBG(A.dbg() << "parseArgs()" << std::endl);
 		bool keepgoing = A.parseArgs(argc, argv);
-		if (keepgoing) keepgoing = A.parseOperands();
-		if (keepgoing) A.run();
+
+		// Parse operands and prepare for the call
+		if (keepgoing) {
+			//ukoct_DBG(A.dbg() << "parseOperands()" << std::endl);
+			keepgoing = A.parseOperands();
+		}
+
+		// Call operands
+		if (keepgoing) {
+			//ukoct_DBG(A.dbg() << "executeOperands()" << std::endl);
+			A.executeOperands();
+		}
+
+		//ukoct_DBG(A.dbg() << "FINISHED" << std::endl);
 
 	} catch (ukoct::Error& e) {
 		A.err() << "UKOCT EXCEPTION " << e.code() << ": " << e.what() << std::endl;
@@ -45,7 +57,7 @@ bool ArgState::initialize() {
 	parser.footer = FOOTERTEXT;
 
 	// Sorry, my mistake.
-	for (size_t i = 0; i < sizeof(options) / sizeof(Option); ++i) {
+	for (size_t i = 1; i < sizeof(options) / sizeof(Option); ++i) {
 		const EOption opt = (EOption) i;
 		const Option& desc = options[i];
 		ez::ezOptionValidator* validator = desc.type ? new ez::ezOptionValidator(desc.type) : NULL;
@@ -61,6 +73,7 @@ bool ArgState::initialize() {
 				, desc.longFlag
 				, validator
 			);
+
 		} else if (desc.longFlag != NULL) {
 			parser.add(
 				desc.defaultVal
@@ -71,6 +84,7 @@ bool ArgState::initialize() {
 				, desc.longFlag
 				, validator
 			);
+
 		} else {
 			ukoct_ASSERT(opt != OPT_NONE, "Invalid option found! Revise the source code!");
 		}
@@ -110,9 +124,9 @@ bool ArgState::parseArgs(int argc, const char** argv) {
 
 	if (keepgoing) {
 		// Input
-		if (!parser.lastArgs.empty()) {
-			inputOperand.inputStream.fileName = *parser.lastArgs.back();
-			std::cerr << inputOperand.inputStream.fileName << std::endl;
+		if (parser.firstArgs.size() > 1) {
+			inputOperand.inputStream.fileName = *parser.firstArgs.back();
+			dbg() << "Found input file \"" << inputOperand.inputStream.fileName << "\"." << std::endl;
 		}
 
 		// Options
@@ -120,16 +134,20 @@ bool ArgState::parseArgs(int argc, const char** argv) {
 		for (int i = OPT_MIN_; i <= OPT_MAX_ && keepgoing; ++i) {
 			EOption optionId = (EOption)i;
 			const Option& option = options[optionId];
-			const char* optionName = option.shortFlag ? option.shortFlag : option.longFlag;
+			const char* optionName = option.shortFlag != NULL ? option.shortFlag : option.longFlag;
 
 			if (parser.isSet(optionName)) {
 				Operand operand;
 				operand.optionId = optionId;
 				operand.ezGroup = parser.get(optionName);
 				operand.parseIndex = operand.argGroup().parseIndex.back();
+				operand.stage = STAGE_PARSE;
 
-				if (option.action != ACT_NONE)
+				ukoct_DBG(dbg() << "Parsing argument for option " << optionId << ": '" << optionName << "'." << std::endl);
+
+				if (option.action != ACT_NONE) {
 					numActions++;
+				}
 
 				switch(operand.optionId) {
 				case OPT_SILENT:
@@ -137,7 +155,10 @@ bool ArgState::parseArgs(int argc, const char** argv) {
 					break;
 
 				case OPT_VERBOSE:
-					verbose = VERB_VERBOSE;
+					if (operand.ezGroup->parseIndex.size() > 1)
+						verbose = VERB_DEBUG;
+					else
+						verbose = VERB_VERBOSE;
 					break;
 
 				case OPT_TIMELIMIT:
@@ -260,7 +281,13 @@ bool ArgState::parseArgs(int argc, const char** argv) {
 							multiOperand.parseIndex = operand.argGroup().parseIndex[i];
 							multiOperand.ezGroup = operand.ezGroup;
 							multiOperand.args = multiArgs[i];
-							operands.push_back(operand);
+							multiOperand.stage = STAGE_PARSE;
+
+							if (option.action == ACT_OPER && option.nargs != 0) {
+								multiOperand.inputStream.fileName = multiArgs[i].back();
+							}
+
+							operands.push_back(multiOperand);
 						}
 
 					} else {
@@ -272,9 +299,11 @@ bool ArgState::parseArgs(int argc, const char** argv) {
 							operandOccurrence.optionId = operand.optionId;
 							operandOccurrence.parseIndex = parseIndex;
 							operandOccurrence.ezGroup = operand.ezGroup;
+							operandOccurrence.stage = STAGE_PARSE;
 							operands.push_back(operandOccurrence);
 						}
 					}
+
 					break;
 				}
 				}
@@ -303,101 +332,27 @@ bool ArgState::parseOperands() {
 	ukoct_ASSERT(stage == STAGE_PARSE, "parseOperands called and ArgState not in STAGE_PARSE.");
 	bool keepgoing = true;
 	std::sort(operands.begin(), operands.end());
-	stage = STAGE_PREPARE;
+	stage = STAGE_INIT;
 	return keepgoing;
 }
 
 
-bool ArgState::parseInputOperand(Operand& operand) {
-	return parseInputStream(operand);
-}
-
-
-bool ArgState::parseOutputOperand(Operand& operand) {
-	return parseOutputStream(operand);
-}
-
-
-bool ArgState::parseInputStream(Operand& operand) {
-	bool keepgoing = true;
-	const Option& option = options[operand.optionId];
-
-	if (operand.inputStream.fileName.empty()) {
-		// Over-protecting?
-		if (option.required) {
-			err() << "Please specify an input file for option '" << option.longFlag << "'. " << std::endl;
-			exitCode = RETERR;
-			keepgoing = false;
-		}
-
-	} else if (operand.inputStream.fileName.compare("-") == 0) {
-		std::string buf;
-		operand.inputStream.stringStream = new std::stringstream();
-		operand.inputStream.stream = operand.inputStream.stringStream;
-
-		while (std::getline(std::cin, buf)) {
-			*(operand.inputStream.stringStream) << buf << std::endl;
-		}
-
-	} else if (operand.inputStream.fileName.empty()) {
-		operand.inputStream.fileStream = new std::ifstream();
-		operand.inputStream.stream = operand.inputStream.fileStream;
-		operand.inputStream.fileStream->open(operand.inputStream.fileName.c_str());
-
-		if (!operand.inputStream.fileStream->is_open()) {
-			err() << "Could not open input file \"" << operand.inputStream.fileName << "\"." << std::endl;
-			exitCode = RETERR;
-			keepgoing = false;
-		}
-	}
-
-	return keepgoing;
-}
-
-
-bool ArgState::parseOutputStream(Operand& operand) {
-	bool keepgoing = true;
-	const Option& option = options[operand.optionId];
-
-	if (operand.inputStream.fileName.empty()) {
-		// Over-protecting?
-		if (option.required) {
-			err() << "Please specify an output file for option '" << options[operand.optionId].longFlag << "'."<< std::endl;
-			exitCode = RETERR;
-			keepgoing = false;
-		}
-
-	} else if (operand.outputStream.fileName.compare("-") == 0) {
-		operand.outputStream.stream = &std::cout;
-
-	} else {
-		operand.outputStream.fileStream = new std::ofstream();
-		operand.outputStream.stream = operand.outputStream.fileStream;
-
-		operand.outputStream.fileStream->open(operand.outputStream.fileName.c_str());
-		if (!operand.outputStream.fileStream->is_open()) {
-			err() << "Could not open output file \"" << operand.outputStream.fileStream << "\"." << std::endl;
-			exitCode = RETERR;
-			keepgoing = false;
-		}
-	}
-
-	return keepgoing;
-}
-
-
-void ArgState::run() {
-	ukoct_ASSERT(stage == STAGE_PREPARE, "parseOperands called and ArgState not in STAGE_PREPARE.");
+void ArgState::executeOperands() {
+	ukoct_ASSERT(stage == STAGE_INIT, "parseOperands called and ArgState not in STAGE_INIT.");
 	bool keepgoing = true;
 	const IOperationCallback* operationCallback = operationCallbacks[implType][elemType];
 	bool parsedInputs = false;
 
+	// Executes each operand, in order
 	for (std::vector<Operand>::iterator it = operands.begin(); it != operands.end() && keepgoing; ++it) {
 		const Option& option = options[it->optionId];
 		EAction action = option.action;
 		Operand& operand = *it;
+		operand.stage = STAGE_INIT;
 
 		ukoct_ASSERT(action >= ACT_MIN_ && action <= ACT_MAX_, "Unknown action declared, check the source code!");
+		dbg() << "Initializing operand " << operand.optionId << ", " << option.longFlag << std::endl;
+
 		switch(option.action) {
 		case ACT_HELP:
 			printHelp();
@@ -419,8 +374,11 @@ void ArgState::run() {
 
 			} else {
 				std::string source;
+
+				ukoct_ASSERT(outputOperand.outputStream.isParsed(), "Output operand not parsed or opened!");
+
 				operationCallback->source(source);
-				std::cout << source << std::endl;
+				*outputOperand.outputStream.stream << source << std::endl;
 			}
 			break;
 
@@ -433,10 +391,24 @@ void ArgState::run() {
 			} else {
 				if (!parsedInputs) {
 					parsedInputs = true;
-					keepgoing = parseInputOperand(inputOperand) && parseOutputOperand(outputOperand);
+					// Parse input
+					keepgoing = parseInputOperand(inputOperand);
+
+					// Parse output
+					if (keepgoing) keepgoing = parseOutputOperand(outputOperand);
 				}
-				keepgoing = parseInputOperand(operand);
-				keepgoing = operationCallback->operator()(*this, *it);
+
+				// Open input files for operand
+				if (keepgoing && option.nargs != 0) {
+					parseInputOperand(operand);
+				}
+
+				// Initialize operand
+				if (keepgoing) {
+					operand.initTiming.start();
+					keepgoing = operationCallback->operator()(*this, operand);
+					operand.initTiming.end();
+				}
 			}
 			break;
 		}
@@ -446,13 +418,129 @@ void ArgState::run() {
 		stage = STAGE_RUN;
 
 	for (std::vector<Operand>::iterator it = operands.begin(); it != operands.end() && keepgoing; ++it) {
-		keepgoing = operationCallback->operator()(*this, *it);
+		Operand& operand = *it;
+		const Option& option = options[operand.optionId];
+		operand.stage = STAGE_RUN;
+
+		dbg() << "Executing operand " << operand.optionId << ", " << option.longFlag << std::endl;
+
+		if (option.action == ACT_OPER) {
+			it->execTiming.start();
+			keepgoing = operationCallback->operator()(*this, *it);
+			it->execTiming.end();
+
+			// Print timings
+			if (verbose >= VERB_NORMAL) {
+				prof() << "oper " << options[operand.optionId].longFlag << " init ";
+				operand.initTiming.print(prof(false));
+				prof(false) << " exec ";
+				operand.execTiming.print(prof(false));
+				if (option.nargs > 0)
+					prof(false) << " input '" << operand.inputStream.fileName << "'" << std::endl;
+				else
+					prof(false) << std::endl;
+			}
+		}
 	}
 
 	if (keepgoing)
 		stage = STAGE_FINISH;
 
-	// The FINISH stage is left for the ArgState destructor to deal with.
+	for (std::vector<Operand>::iterator it = operands.begin(); it != operands.end() && keepgoing; ++it) {
+		const Operand& operand = *it;
+		const Option& option = options[operand.optionId];
+
+		dbg() << "Finalizing operand " << operand.optionId << ", " << option.longFlag << std::endl;
+
+		operationCallback->operator()(*this, *it);
+	}
+}
+
+
+ArgState::~ArgState() {
+	// Nop
+}
+
+
+bool ArgState::parseInputOperand(Operand& operand) {
+	return parseInputStream(operand);
+}
+
+
+bool ArgState::parseOutputOperand(Operand& operand) {
+	return parseOutputStream(operand);
+}
+
+
+bool ArgState::parseInputStream(Operand& operand) {
+	bool keepgoing = true;
+	const Option& option = options[operand.optionId];
+
+	if (operand.inputStream.fileName.empty()) {
+		if (option.required) {
+			err() << "Please specify an input file for option '" << option.longFlag << "'. " << std::endl;
+			exitCode = RETERR;
+			keepgoing = false;
+
+		} else {
+			operand.inputStream.stream = &nullstream;
+		}
+
+	} else if (operand.inputStream.fileName.compare("-") == 0) {
+		std::string buf;
+		operand.inputStream.stringStream = new std::stringstream();
+		operand.inputStream.stream = operand.inputStream.stringStream;
+
+		while (std::getline(std::cin, buf)) {
+			*(operand.inputStream.stringStream) << buf << std::endl;
+		}
+
+	} else {
+		operand.inputStream.fileStream = new std::ifstream();
+		operand.inputStream.stream = operand.inputStream.fileStream;
+		operand.inputStream.fileStream->open(operand.inputStream.fileName.c_str());
+
+		if (!operand.inputStream.fileStream->is_open()) {
+			err() << "Could not open input file \"" << operand.inputStream.fileName << "\"." << std::endl;
+			exitCode = RETERR;
+			keepgoing = false;
+		}
+	}
+
+	return keepgoing;
+}
+
+
+bool ArgState::parseOutputStream(Operand& operand) {
+	bool keepgoing = true;
+	const Option& option = options[operand.optionId];
+
+	if (operand.outputStream.fileName.empty()) {
+
+		if (option.required) {
+			err() << "Please specify an output file for option '" << options[operand.optionId].longFlag << "'."<< std::endl;
+			exitCode = RETERR;
+			keepgoing = false;
+		} else {
+			operand.outputStream.stream = &nullstream;
+		}
+
+	} else if (operand.outputStream.fileName.compare("-") == 0) {
+		operand.outputStream.stream = &std::cout;
+
+	} else {
+		operand.outputStream.fileStream = new std::ofstream();
+		operand.outputStream.stream = operand.outputStream.fileStream;
+
+		operand.outputStream.fileStream->open(operand.outputStream.fileName.c_str());
+		if (!operand.outputStream.fileStream->is_open()) {
+			err() << "Could not open output file \"" << operand.outputStream.fileStream << "\"." << std::endl;
+			exitCode = RETERR;
+			keepgoing = false;
+		}
+	}
+
+	return keepgoing;
 }
 
 
@@ -464,7 +552,7 @@ void ArgState::printHelp() {
 
 
 void ArgState::printVersion() {
-	std::cerr << HELPTEXT << FOOTERTEXT << std::endl;
+	std::cerr << VERSIONTEXT << FOOTERTEXT << std::endl;
 }
 
 

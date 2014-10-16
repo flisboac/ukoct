@@ -33,43 +33,43 @@ const Option options[OPT_MAX_ + 1] = {
 
 // Unary Query operator
 , { OPT_OP_ISSAT    , OPTG_OP     , ACT_OPER      , ukoct::OPER_ISCONSISTENT    , false,  0, '\0', ""      , NULL, NULL, "+sat?"             , "help" }
-, { OPT_OP_ISISAT   , OPTG_OP     , ACT_OPER      , ukoct::OPER_ISINTCONSISTENT , false,  0, '\0', ""      , NULL, NULL, "-isat?"            , "help" }
-, { OPT_OP_ISCOH    , OPTG_OP     , ACT_OPER      , ukoct::OPER_ISCOHERENT      , false,  0, '\0', ""      , NULL, NULL, "-coh?"             , "help" }
-, { OPT_OP_ISCL     , OPTG_OP     , ACT_OPER      , ukoct::OPER_ISCLOSED        , false,  0, '\0', ""      , NULL, NULL, "-cl?"              , "help" }
-, { OPT_OP_ISSCL    , OPTG_OP     , ACT_OPER      , ukoct::OPER_ISSTRONGLYCLOSED, false,  0, '\0', ""      , NULL, NULL, "-scl?"             , "help" }
-, { OPT_OP_ISTCL    , OPTG_OP     , ACT_OPER      , ukoct::OPER_ISTIGHTLYCLOSED , false,  0, '\0', ""      , NULL, NULL, "-tcl?"             , "help" }
-, { OPT_OP_ISWCL    , OPTG_OP     , ACT_OPER      , ukoct::OPER_ISWEAKLYCLOSED  , false,  0, '\0', ""      , NULL, NULL, "-wcl?"             , "help" }
-, { OPT_OP_ISTOP    , OPTG_OP     , ACT_OPER      , ukoct::OPER_ISTOP           , false,  0, '\0', ""      , NULL, NULL, "-top?"             , "help" }
-, { OPT_OP_CL       , OPTG_OP     , ACT_OPER      , ukoct::OPER_CLOSURE         , false,  0, '\0', ""      , NULL, NULL, "-cl"               , "help" }
-, { OPT_OP_TCL      , OPTG_OP     , ACT_OPER      , ukoct::OPER_TIGHTCLOSURE    , false,  0, '\0', ""      , NULL, NULL, "-tcl"              , "help" }
+, { OPT_OP_ISISAT   , OPTG_OP     , ACT_OPER      , ukoct::OPER_ISINTCONSISTENT , false,  0, '\0', ""      , NULL, NULL, "+isat?"            , "help" }
+, { OPT_OP_ISCOH    , OPTG_OP     , ACT_OPER      , ukoct::OPER_ISCOHERENT      , false,  0, '\0', ""      , NULL, NULL, "+coh?"             , "help" }
+, { OPT_OP_ISCL     , OPTG_OP     , ACT_OPER      , ukoct::OPER_ISCLOSED        , false,  0, '\0', ""      , NULL, NULL, "+cl?"              , "help" }
+, { OPT_OP_ISSCL    , OPTG_OP     , ACT_OPER      , ukoct::OPER_ISSTRONGLYCLOSED, false,  0, '\0', ""      , NULL, NULL, "+scl?"             , "help" }
+, { OPT_OP_ISTCL    , OPTG_OP     , ACT_OPER      , ukoct::OPER_ISTIGHTLYCLOSED , false,  0, '\0', ""      , NULL, NULL, "+tcl?"             , "help" }
+, { OPT_OP_ISWCL    , OPTG_OP     , ACT_OPER      , ukoct::OPER_ISWEAKLYCLOSED  , false,  0, '\0', ""      , NULL, NULL, "+wcl?"             , "help" }
+, { OPT_OP_ISTOP    , OPTG_OP     , ACT_OPER      , ukoct::OPER_ISTOP           , false,  0, '\0', ""      , NULL, NULL, "+top?"             , "help" }
+, { OPT_OP_CL       , OPTG_OP     , ACT_OPER      , ukoct::OPER_CLOSURE         , false,  0, '\0', ""      , NULL, NULL, "+cl"               , "help" }
+, { OPT_OP_TCL      , OPTG_OP     , ACT_OPER      , ukoct::OPER_TIGHTCLOSURE    , false,  0, '\0', ""      , NULL, NULL, "+tcl"              , "help" }
 
 // Unary operators
-, { OPT_OP_ECHO     , OPTG_OP     , ACT_OPER      , ukoct::OPER_NONE            , false,  0, '\0', ""      , NULL, NULL, "-echo"             , "help" }
-, { OPT_OP_SP       , OPTG_OP     , ACT_OPER      , ukoct::OPER_SHORTESTPATH    , false,  0, '\0', ""      , NULL, NULL, "-sp"               , "help" }
-, { OPT_OP_STR      , OPTG_OP     , ACT_OPER      , ukoct::OPER_STRENGTHEN      , false,  0, '\0', ""      , NULL, NULL, "-str"              , "help" }
-, { OPT_OP_TIGHT    , OPTG_OP     , ACT_OPER      , ukoct::OPER_TIGHTEN         , false,  0, '\0', ""      , NULL, NULL, "-tight"            , "help" }
-, { OPT_OP_TOP      , OPTG_OP     , ACT_OPER      , ukoct::OPER_TOP             , false,  0, '\0', ""      , NULL, NULL, "-top"              , "help" }
+, { OPT_OP_ECHO     , OPTG_OP     , ACT_OPER      , ukoct::OPER_NONE            , false,  0, '\0', ""      , NULL, NULL, "+echo"             , "help" }
+, { OPT_OP_SP       , OPTG_OP     , ACT_OPER      , ukoct::OPER_SHORTESTPATH    , false,  0, '\0', ""      , NULL, NULL, "+sp"               , "help" }
+, { OPT_OP_STR      , OPTG_OP     , ACT_OPER      , ukoct::OPER_STRENGTHEN      , false,  0, '\0', ""      , NULL, NULL, "+str"              , "help" }
+, { OPT_OP_TIGHT    , OPTG_OP     , ACT_OPER      , ukoct::OPER_TIGHTEN         , false,  0, '\0', ""      , NULL, NULL, "+tight"            , "help" }
+, { OPT_OP_TOP      , OPTG_OP     , ACT_OPER      , ukoct::OPER_TOP             , false,  0, '\0', ""      , NULL, NULL, "+top"              , "help" }
 
 // Binary operators
-, { OPT_OP_PUSHD    , OPTG_OP     , ACT_OPER      , ukoct::OPER_PUSHDIFFCONS    , false,  1, '\0', ""      , NULL, NULL, "-pushd"            , "help" }
-, { OPT_OP_PUSHC    , OPTG_OP     , ACT_OPER      , ukoct::OPER_PUSHOCTCONS     , false,  1, '\0', ""      , NULL, NULL, "-pushc"            , "help" }
-, { OPT_OP_POP      , OPTG_OP     , ACT_OPER      , ukoct::OPER_FORGETOCTVAR    , false,  1, '\0', ""      , NULL, NULL, "-pop"              , "help" }
+, { OPT_OP_PUSHD    , OPTG_OP     , ACT_OPER      , ukoct::OPER_PUSHDIFFCONS    , false,  1, '\0', ""      , NULL, NULL, "+pushd"            , "help" }
+, { OPT_OP_PUSHC    , OPTG_OP     , ACT_OPER      , ukoct::OPER_PUSHOCTCONS     , false,  1, '\0', ""      , NULL, NULL, "+pushc"            , "help" }
+, { OPT_OP_POP      , OPTG_OP     , ACT_OPER      , ukoct::OPER_FORGETOCTVAR    , false,  1, '\0', ""      , NULL, NULL, "+pop"              , "help" }
 
 // Binary inter-matrix Operators
-, { OPT_OP_EQ       , OPTG_OP     , ACT_OPER      , ukoct::OPER_NONE            , false,  1, '\0', ""      , NULL, NULL, "-eq"               , "help" }
-, { OPT_OP_NEQ      , OPTG_OP     , ACT_OPER      , ukoct::OPER_EQUALS          , false,  1, '\0', ""      , NULL, NULL, "-neq"              , "help" }
-, { OPT_OP_INC      , OPTG_OP     , ACT_OPER      , ukoct::OPER_INCLUDES        , false,  1, '\0', ""      , NULL, NULL, "-inc"              , "help" }
-, { OPT_OP_AND      , OPTG_OP     , ACT_OPER      , ukoct::OPER_UNION           , false,  1, '\0', ""      , NULL, NULL, "-and"              , "help" }
-, { OPT_OP_OR       , OPTG_OP     , ACT_OPER      , ukoct::OPER_INTERSECTION    , false,  1, '\0', ""      , NULL, NULL, "-or"               , "help" }
+, { OPT_OP_EQ       , OPTG_OP     , ACT_OPER      , ukoct::OPER_EQUALS          , false,  1, '\0', ""      , NULL, NULL, "+eq"               , "help" }
+, { OPT_OP_NEQ      , OPTG_OP     , ACT_OPER      , ukoct::OPER_NONE            , false,  1, '\0', ""      , NULL, NULL, "+neq"              , "help" }
+, { OPT_OP_INC      , OPTG_OP     , ACT_OPER      , ukoct::OPER_INCLUDES        , false,  1, '\0', ""      , NULL, NULL, "+inc"              , "help" }
+, { OPT_OP_AND      , OPTG_OP     , ACT_OPER      , ukoct::OPER_UNION           , false,  1, '\0', ""      , NULL, NULL, "+and"              , "help" }
+, { OPT_OP_OR       , OPTG_OP     , ACT_OPER      , ukoct::OPER_INTERSECTION    , false,  1, '\0', ""      , NULL, NULL, "+or"               , "help" }
 };
 
 
 const TypeName operNames[ukoct::OPER_MAX_ + 1] {
 	  { ukoct::OPER_NONE            , NULL }
 	, { ukoct::OPER_COPY            , "copy" }
-	, { ukoct::OPER_ISCONSISTENT    , "sat" }
-	, { ukoct::OPER_ISINTCONSISTENT , "isat" }
-	, { ukoct::OPER_ISCOHERENT      , "coh" }
+	, { ukoct::OPER_ISCONSISTENT    , "sat?" }
+	, { ukoct::OPER_ISINTCONSISTENT , "isat?" }
+	, { ukoct::OPER_ISCOHERENT      , "coh?" }
 	, { ukoct::OPER_ISCLOSED        , "cl?" }
 	, { ukoct::OPER_ISSTRONGLYCLOSED, "scl?" }
 	, { ukoct::OPER_ISTIGHTLYCLOSED , "tcl?" }
@@ -104,7 +104,7 @@ const OperDetailValue operDetailValues[operDetailValues_sz] = {
 	, { "onepass"  , ukoct::O_EXEC  , ukoct::O_EXEC_ONEPASS  , "On operations implementing third dimension loops, this option forces the implementation to make a single kernel call, without internal kernel loops. E.g.: queue(kernel(m))." }
 	, { "looped"   , ukoct::O_EXEC  , ukoct::O_EXEC_LOOP     , "On operations implementing third dimension loops, this option forces the implementation to make a single kernel call, probably with internal kernel loops. E.g.: queue(kernel(m, foreach k))." }
 	, { "queued"   , ukoct::O_EXEC  , ukoct::O_EXEC_QUEUED   , "On operations implementing third dimension loops, this option forces the implementation to make one kernel call per third dimension index. E.g.: foreach k do queue(kernel(m, k))." }
-	, { NULL     , 0 }
+	, { NULL       , 0 }
 };
 
 
