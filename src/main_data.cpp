@@ -8,31 +8,31 @@ NullStream nullstream;
 
 const TypeName operNames[ukoct::OPER_MAX_ + 1] {
 	  { ukoct::OPER_NONE            , NULL }
-	, { ukoct::OPER_COPY            , "+copy" }
-	, { ukoct::OPER_ISCONSISTENT    , "+sat?" }
-	, { ukoct::OPER_ISINTCONSISTENT , "+isat?" }
-	, { ukoct::OPER_ISCOHERENT      , "+coh?" }
-	, { ukoct::OPER_ISCLOSED        , "+cl?" }
-	, { ukoct::OPER_ISSTRONGLYCLOSED, "+scl?" }
-	, { ukoct::OPER_ISTIGHTLYCLOSED , "+tcl?" }
-	, { ukoct::OPER_ISWEAKLYCLOSED  , "+wcl?" }
-	, { ukoct::OPER_ISTOP           , "+top?" }
+	, { ukoct::OPER_COPY            , "copy" }
+	, { ukoct::OPER_ISCONSISTENT    , "sat?" }
+	, { ukoct::OPER_ISINTCONSISTENT , "isat?" }
+	, { ukoct::OPER_ISCOHERENT      , "coh?" }
+	, { ukoct::OPER_ISCLOSED        , "cl?" }
+	, { ukoct::OPER_ISSTRONGLYCLOSED, "scl?" }
+	, { ukoct::OPER_ISTIGHTLYCLOSED , "tcl?" }
+	, { ukoct::OPER_ISWEAKLYCLOSED  , "wcl?" }
+	, { ukoct::OPER_ISTOP           , "top?" }
 
-	, { ukoct::OPER_CLOSURE         , "+cl" }
-	, { ukoct::OPER_TIGHTCLOSURE    , "+tcl" }
-	, { ukoct::OPER_SHORTESTPATH    , "+sp" }
-	, { ukoct::OPER_STRENGTHEN      , "+str" }
-	, { ukoct::OPER_TIGHTEN         , "+tight" }
-	, { ukoct::OPER_TOP             , "+top" }
+	, { ukoct::OPER_CLOSURE         , "cl" }
+	, { ukoct::OPER_TIGHTCLOSURE    , "tcl" }
+	, { ukoct::OPER_SHORTESTPATH    , "sp" }
+	, { ukoct::OPER_STRENGTHEN      , "str" }
+	, { ukoct::OPER_TIGHTEN         , "tight" }
+	, { ukoct::OPER_TOP             , "top" }
 
-	, { ukoct::OPER_PUSHDIFFCONS    , "+pushd" }
-	, { ukoct::OPER_PUSHOCTCONS     , "+pushc" }
-	, { ukoct::OPER_FORGETOCTVAR    , "+pop" }
+	, { ukoct::OPER_PUSHDIFFCONS    , "pushd" }
+	, { ukoct::OPER_PUSHOCTCONS     , "pushc" }
+	, { ukoct::OPER_FORGETOCTVAR    , "pop" }
 
-	, { ukoct::OPER_EQUALS          , "+eq" }
-	, { ukoct::OPER_INCLUDES        , "+inc" }
-	, { ukoct::OPER_UNION           , "+and" }
-	, { ukoct::OPER_INTERSECTION    , "+or" }
+	, { ukoct::OPER_EQUALS          , "eq" }
+	, { ukoct::OPER_INCLUDES        , "inc" }
+	, { ukoct::OPER_UNION           , "and" }
+	, { ukoct::OPER_INTERSECTION    , "or" }
 };
 
 

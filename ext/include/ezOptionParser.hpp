@@ -1812,7 +1812,7 @@ void ezOptionParser::getUsageDescriptions(std::string & usage, int width, Layout
   std::string opts;
   std::vector<std::string> sortedOpts;
   // Sort first flag of each group with other groups.
-  std::sort(stringPtrs.begin(), stringPtrs.end(), CmpOptStringPtr);
+  //std::sort(stringPtrs.begin(), stringPtrs.end(), CmpOptStringPtr);
    for(i=0; i < (long int)groups.size(); ++i) {
     //printf("DEBUG:%d: %d %d %s\n", __LINE__, i, stringPtrToIndexMap[stringPtrs[i]], stringPtrs[i]->c_str());
     k = stringPtrToIndexMap[stringPtrs[i]];

@@ -10,6 +10,7 @@ enum EGeneralOption {
 	, OPT_GENERAL_SILENT      // -V      Activates silent mode
 	, OPT_GENERAL_VERBOSE     // -v      Activates verbose mode
     , OPT_GENERAL_TIMELIMIT   // -t=NUM  Specifies the time limit, in seconds
+    , OPT_GENERAL_PRINTTIMINGS// -T      Print timing information
     , OPT_GENERAL_OUTPUT      // -o=FILE Specifies the output
     , OPT_GENERAL_ELEMTYPE    // -e=TYPE Specify the element type to be used (float, double, half, etc)
     , OPT_GENERAL_EXECTYPE    // -x=SOLV Specify the solver to be used (CPU, OpenCL, etc)

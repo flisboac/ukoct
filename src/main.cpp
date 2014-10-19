@@ -23,17 +23,12 @@ ArgState::~ArgState() {
 
 bool ArgState::initialize() {
 	bool keepgoing = true;
-
 	parser.overview = HELPTEXT;
 	parser.syntax = USAGETEXT;
 	parser.example = EXAMPLETEXT;
 	parser.footer = FOOTERTEXT;
-
-	for (int optionGroupId = OPTG_MIN_; optionGroupId <= OPTG_MAX_ && keepgoing; ++optionGroupId) {
-		ukoct_ASSERT(optionGroupCallbacks[optionGroupId] != NULL, "NULL Option group callback, recheck declarations.");
-		const IOptionGroupCallback& gcb = *optionGroupCallbacks[optionGroupId];
-		keepgoing = gcb(*this);
-	}
+	stage = STAGE_PREPARE;
+	keepgoing = callOptionGroups();
 
 	if (keepgoing) {
 		stage = STAGE_PARSE;
@@ -52,31 +47,36 @@ void ArgState::run(int argc, const char** argv) {
 	// PARSING
 
 
-	std::vector<std::string> badOptions;
-	std::vector<std::string> badArgs;
-	parser.parse(argc, argv);
+	if (keepgoing) {
+		std::vector<std::string> badOptions;
+		std::vector<std::string> badArgs;
+		parser.parse(argc, argv);
 
-	if (!parser.gotRequired(badOptions)) {
-		for(int i=0; i < badOptions.size(); ++i)
-			err() << "Missing required option " << badOptions[i] << ".\n";
-		err(false) << "Check `" << ukoct_NAME << " -h` for help." << std::endl;
-		keepgoing = false;
+		if (!parser.gotRequired(badOptions)) {
+			for(int i=0; i < badOptions.size(); ++i)
+				err() << "Missing required option " << badOptions[i] << ".\n";
+			err(false) << "Check `" << ukoct_NAME << " -h` for help." << std::endl;
+			keepgoing = false;
+		}
+
+		if (keepgoing && !parser.gotExpected(badOptions)) {
+			for(int i=0; i < badOptions.size(); ++i)
+				err() << "Wrong arguments for option " << badOptions[i] << ".\n";
+			err(false) << "Check `" << ukoct_NAME << " -h` for help." << std::endl;
+			keepgoing = false;
+		}
+
+		if (keepgoing && !parser.gotValid(badOptions, badArgs)) {
+			for(int i=0; i < badOptions.size(); ++i)
+				err() << "Got invalid argument \"" << badArgs[i] << "\" for option " << badOptions[i] << "." << std::endl;
+			err(false) << "Check `" << ukoct_NAME << " -h` for help." << std::endl;
+			keepgoing = false;
+		}
 	}
 
-	if (keepgoing && !parser.gotExpected(badOptions)) {
-		for(int i=0; i < badOptions.size(); ++i)
-			err() << "Wrong arguments for option " << badOptions[i] << ".\n";
-		err(false) << "Check `" << ukoct_NAME << " -h` for help." << std::endl;
-		keepgoing = false;
+	if (keepgoing) {
+		keepgoing = callOptionGroups();
 	}
-
-	if (keepgoing && !parser.gotValid(badOptions, badArgs)) {
-		for(int i=0; i < badOptions.size(); ++i)
-			err() << "Got invalid argument \"" << badArgs[i] << "\" for option " << badOptions[i] << "." << std::endl;
-		err(false) << "Check `" << ukoct_NAME << " -h` for help." << std::endl;
-		keepgoing = false;
-	}
-
 
 	if (keepgoing) {
 		// Input
@@ -111,15 +111,11 @@ void ArgState::run(int argc, const char** argv) {
 				for (size_t i = 0; i < multiArgs.size(); ++i) {
 					Operand multiOperand;
 					multiOperand.option = option;
-					multiOperand.parseIndex = ezGroup->parseIndex[i];
+					multiOperand.parseIndex = ezGroup->parseIndex.size() == multiArgs.size() ? ezGroup->parseIndex[i] : 0; // Because of the defaults
 					multiOperand.ezGroup = ezGroup;
 					multiOperand.args = multiArgs[i];
 					multiOperand.stage = STAGE_PARSE;
-
-					for (int optionGroupId = OPTG_MIN_; optionGroupId <= OPTG_MAX_ && keepgoing; ++optionGroupId) {
-						const IOptionGroupCallback& gcb = *optionGroupCallbacks[optionGroupId];
-						keepgoing = gcb(*this, &multiOperand);
-					}
+					keepgoing = callOptionGroups(multiOperand);
 
 					if (keepgoing) {
 						operands.push_back(multiOperand);
@@ -138,11 +134,7 @@ void ArgState::run(int argc, const char** argv) {
 					operandOccurrence.parseIndex = parseIndex;
 					operandOccurrence.ezGroup = ezGroup;
 					operandOccurrence.stage = STAGE_PARSE;
-
-					for (int optionGroupId = OPTG_MIN_; optionGroupId <= OPTG_MAX_ && keepgoing; ++optionGroupId) {
-						const IOptionGroupCallback& gcb = *optionGroupCallbacks[optionGroupId];
-						keepgoing = gcb(*this, &operandOccurrence);
-					}
+					keepgoing = callOptionGroups(operandOccurrence);
 
 					if (keepgoing) {
 						operands.push_back(operandOccurrence);
@@ -169,11 +161,7 @@ void ArgState::run(int argc, const char** argv) {
 	// Open files/streams
 
 	if (keepgoing) {
-		keepgoing = parseInputOperand(inputOperand);
-	}
-
-	if (keepgoing) {
-		keepgoing = parseOutputOperand(outputOperand);
+		keepgoing = parseInputOperand(inputOperand) && parseOutputOperand(outputOperand);
 	}
 
 	if (keepgoing) {
@@ -190,19 +178,13 @@ void ArgState::run(int argc, const char** argv) {
 	if (keepgoing) {
 		stage = STAGE_INIT;
 		std::sort(operands.begin(), operands.end());
+		keepgoing = callOptionGroups();
+	}
 
+	if (keepgoing) {
 		for (auto& operand : operands) {
 			operand.stage = STAGE_INIT;
-
-			for (int optionGroupId = OPTG_MIN_; optionGroupId <= OPTG_MAX_ && keepgoing; ++optionGroupId) {
-				const IOptionGroupCallback& gcb = *optionGroupCallbacks[optionGroupId];
-				operand.initTiming.stage(STAGE_INIT).stageName("init");
-				operand.initTiming.start();
-				keepgoing = gcb(*this, &operand);
-				operand.initTiming.end();
-				operand.initTiming.round();
-			}
-
+			keepgoing = callOptionGroups(operand);
 			if (!keepgoing) {
 				break;
 			}
@@ -215,20 +197,16 @@ void ArgState::run(int argc, const char** argv) {
 
 	if (keepgoing) {
 		stage = STAGE_EXEC;
+		keepgoing = callOptionGroups();
+	}
+
+	if (keepgoing) {
 		unsigned int actionIdx = 1;
 
 		for (auto& operand : operands) {
 			operand.stage = STAGE_EXEC;
 			operand.actionIdx = actionIdx;
-
-			for (int optionGroupId = OPTG_MIN_; optionGroupId <= OPTG_MAX_ && keepgoing; ++optionGroupId) {
-				const IOptionGroupCallback& gcb = *optionGroupCallbacks[optionGroupId];
-				operand.execTiming.stage(STAGE_EXEC).stageName("run");
-				operand.execTiming.start();
-				keepgoing = gcb(*this, &operand);
-				operand.execTiming.end();
-				operand.execTiming.round();
-			}
+			keepgoing = callOptionGroups(operand);
 
 			if (!keepgoing) {
 				break;
@@ -236,6 +214,14 @@ void ArgState::run(int argc, const char** argv) {
 				++actionIdx;
 			}
 		}
+	}
+
+
+	// PRINT RESULTS
+
+
+	if (keepgoing && printTimings) {
+		// TODO Print results
 	}
 }
 
@@ -401,5 +387,108 @@ bool ArgState::parseOutputStream(Operand& operand) {
 		}
 	}
 
+	return keepgoing;
+}
+
+
+bool ArgState::callOptionGroups() {
+	bool keepgoing = true;
+
+	for (int optionGroupId = OPTG_MIN_; optionGroupId <= OPTG_MAX_ && keepgoing; ++optionGroupId) {
+		const IOptionGroupCallback& gcb = *optionGroupCallbacks[optionGroupId];
+		ukoct_ASSERT(optionGroupCallbacks[optionGroupId] != NULL, "NULL Option group callback, recheck declarations.");
+		keepgoing = gcb(*this);
+	}
+
+	return keepgoing;
+}
+
+
+bool ArgState::callOptionGroups(Operand& operand) {
+	bool keepgoing = true;
+
+	// Option 1: Call all optionGroups on all operands, regardless of its
+	// original option and option group
+#if 0
+	for (int optionGroupId = OPTG_MIN_; optionGroupId <= OPTG_MAX_ && keepgoing; ++optionGroupId) {
+		const IOptionGroupCallback& gcb = *optionGroupCallbacks[optionGroupId];
+
+		switch (operand.stage) {
+		case STAGE_INIT:
+			operand.initTiming.stage(STAGE_INIT).stageName("init");
+			operand.initTiming.start();
+			break;
+		case STAGE_RUN:
+			operand.execTiming.stage(STAGE_EXEC).stageName("run");
+			operand.execTiming.start();
+			break;
+		}
+
+		keepgoing = gcb(*this, &operand);
+
+		// Timing end
+		switch(operand.stage) {
+		case STAGE_INIT:
+			operand.initTiming.end();
+			operand.initTiming.round();
+			break;
+		case STAGE_RUN:
+			operand.execTiming.end();
+			operand.execTiming.round();
+			break;
+		}
+	}
+#endif
+	// Option 2: Call only the option group declared on the option that the
+	// operand belongs to.
+	ukoct_ASSERT(operand.option != NULL, "Operand must have an option object.");
+	const IOptionGroupCallback& gcb = *optionGroupCallbacks[operand.option->group];
+	ukoct_ASSERT(gcb != NULL, "Invalid option declared for option, `gcb` cannot be NULL.");
+
+	// Timing start
+	switch (operand.stage) {
+	case STAGE_INIT:
+		operand.initTiming.stage(STAGE_INIT).stageName("init");
+		operand.initTiming.start();
+		break;
+	case STAGE_RUN:
+		operand.execTiming.stage(STAGE_EXEC).stageName("run");
+		operand.execTiming.start();
+		break;
+	}
+
+	// Run
+	keepgoing = gcb(*this, &operand);
+
+	// Timing end
+	switch(operand.stage) {
+	case STAGE_INIT:
+		operand.initTiming.end();
+		operand.initTiming.round();
+		break;
+	case STAGE_RUN:
+		operand.execTiming.end();
+		operand.execTiming.round();
+		break;
+	}
+
+	return keepgoing;
+}
+
+
+bool ArgState::initOperand(Operand& operand) {
+	return (!operand.inputStream.fileName.empty() ? initInputOperand(operand) : true) &&
+			(!operand.outputStream.fileName.empty() ? initOutputOperand(operand) : true);
+}
+
+
+bool ArgState::initInputOperand(Operand& operand) {
+	bool keepgoing = true;
+	return keepgoing;
+}
+
+
+bool ArgState::initOutputOperand(Operand& operand) {
+	bool keepgoing = true;
 	return keepgoing;
 }

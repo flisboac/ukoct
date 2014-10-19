@@ -327,6 +327,7 @@ struct ArgState {
 	std::ostream* sout;
 	EVerboseLevel verbose;
 	int maxTime;
+	bool printTimings;
 	size_t totalActions;
 	Operand inputOperand;
 	Operand outputOperand;
@@ -340,6 +341,7 @@ struct ArgState {
 		, stage(STAGE_PREPARE)
 		, verbose(VERB_DEBUG)
 		, maxTime(0)
+		, printTimings(false)
 		, totalActions(0)
 		, inputOperand("-", "")
 		, outputOperand("", "-")
@@ -364,10 +366,15 @@ struct ArgState {
 	bool parseOperand(Operand& operand);
 	bool parseInputOperand(Operand& operand);
 	bool parseOutputOperand(Operand& operand);
+	bool initOperand(Operand& operand);
 
 private:
 	bool parseInputStream(Operand& operand);
 	bool parseOutputStream(Operand& operand);
+	bool initInputOperand(Operand& operand);
+	bool initOutputOperand(Operand& operand);
+	bool callOptionGroups();
+	bool callOptionGroups(Operand& operand);
 };
 
 
